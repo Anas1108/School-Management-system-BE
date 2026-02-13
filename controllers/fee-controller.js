@@ -349,6 +349,64 @@ const getDefaultersByClass = async (req, res) => {
     }
 };
 
+const searchStudentsFees = async (req, res) => {
+    try {
+        const { rollNum, classId, schoolId } = req.query;
+
+        if (!schoolId) {
+            return res.status(400).json({ message: "School ID is required" });
+        }
+
+        let studentQuery = { school: schoolId };
+        if (rollNum) studentQuery.rollNum = rollNum;
+        if (classId) studentQuery.sclassName = classId;
+
+        const students = await Student.find(studentQuery).populate('sclassName', 'sclassName');
+
+        if (students.length === 0) {
+            return res.send([]);
+        }
+
+        const studentIds = students.map(s => s._id);
+
+        // Aggregate invoices for these students
+        const feeData = await StudentInvoice.aggregate([
+            { $match: { studentId: { $in: studentIds } } },
+            {
+                $group: {
+                    _id: "$studentId",
+                    totalAmount: { $sum: "$totalAmount" },
+                    totalLateFine: { $sum: "$lateFine" },
+                    totalPaid: { $sum: "$paidAmount" }
+                }
+            }
+        ]);
+
+        const result = students.map(student => {
+            const fees = feeData.find(f => f._id.toString() === student._id.toString()) || {
+                totalAmount: 0,
+                totalLateFine: 0,
+                totalPaid: 0
+            };
+
+            return {
+                studentId: student._id,
+                studentName: student.name,
+                rollNum: student.rollNum,
+                className: student.sclassName ? student.sclassName.sclassName : 'N/A',
+                totalDue: (fees.totalAmount + fees.totalLateFine) - fees.totalPaid,
+                totalPaid: fees.totalPaid
+            };
+        });
+
+        res.send(result);
+
+    } catch (err) {
+        console.error("Error in searchStudentsFees:", err);
+        res.status(500).json(err);
+    }
+};
+
 module.exports = {
     createFeeHead,
     getFeeHeads,
@@ -359,6 +417,7 @@ module.exports = {
     payInvoice,
     getFeeStats,
     getStudentFeeHistory,
-    getDefaultersByClass
+    getDefaultersByClass,
+    searchStudentsFees
 };
 
