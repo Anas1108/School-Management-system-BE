@@ -130,8 +130,26 @@ const updateStudent = async (req, res) => {
     try {
         if (req.body.password) {
             const salt = await bcrypt.genSalt(10)
-            res.body.password = await bcrypt.hash(res.body.password, salt)
+            req.body.password = await bcrypt.hash(req.body.password, salt)
         }
+
+        if (req.body.rollNum) {
+            const student = await Student.findById(req.params.id);
+            const sclassName = req.body.sclassName || student.sclassName;
+            const school = student.school;
+
+            const existingStudent = await Student.findOne({
+                rollNum: req.body.rollNum,
+                school: school,
+                sclassName: sclassName,
+                _id: { $ne: req.params.id }
+            });
+
+            if (existingStudent) {
+                return res.send({ message: 'Roll Number already exists' });
+            }
+        }
+
         let result = await Student.findByIdAndUpdate(req.params.id,
             { $set: req.body },
             { new: true })
