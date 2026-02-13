@@ -59,7 +59,7 @@ const getFeeStructure = async (req, res) => {
 
 // specialized logic 
 const generateInvoices = async (req, res) => {
-    const { classId, month, year, dueDate, adminID } = req.body;
+    const { classId, month, year, adminID } = req.body;
 
     try {
         const students = await Student.find({ sclassName: classId, school: adminID });
@@ -122,6 +122,13 @@ const generateInvoices = async (req, res) => {
             const uniqueSuffix = studIdStr.substring(studIdStr.length - 6);
             const challanNumber = `SCH-${year}-${month}-${uniqueSuffix}`.toUpperCase();
 
+            // Calculate specific due date
+            const dueDay = feeStructure.dueDay || 10;
+            // Handle if due day > days in month (e.g. Feb 30) -> set to last day
+            const daysInMonth = new Date(year, month, 0).getDate();
+            const actualDueDay = Math.min(dueDay, daysInMonth);
+            const dueDate = new Date(year, month - 1, actualDueDay);
+
             const invoice = new StudentInvoice({
                 studentId: student._id,
                 school: adminID,
@@ -154,7 +161,14 @@ const generateInvoices = async (req, res) => {
 
 const getInvoices = async (req, res) => {
     try {
-        const invoices = await StudentInvoice.find({ classId: req.params.id })
+        const { month, year } = req.query;
+        let query = { classId: req.params.id };
+        if (month && year) {
+            query.month = month;
+            query.year = year;
+        }
+
+        const invoices = await StudentInvoice.find(query)
             .populate('studentId', 'name rollNum')
             .sort({ createdAt: -1 });
         res.send(invoices);
@@ -248,6 +262,93 @@ const getFeeStats = async (req, res) => {
     }
 };
 
+const getStudentFeeHistory = async (req, res) => {
+    try {
+        const studentId = req.params.id;
+        const student = await Student.findById(studentId).populate('sclassName', 'sclassName');
+
+        if (!student) {
+            return res.status(404).json({ message: "Student not found" });
+        }
+
+        const invoices = await StudentInvoice.find({ studentId })
+            .sort({ year: -1, month: -1 }); // Latest first
+
+        let totalDue = 0;
+        let totalPaid = 0;
+
+        invoices.forEach(inv => {
+            const due = (inv.totalAmount + inv.lateFine) - inv.paidAmount;
+            if (due > 0) totalDue += due;
+            totalPaid += inv.paidAmount;
+        });
+
+        res.send({
+            studentName: student.name,
+            className: student.sclassName ? student.sclassName.sclassName : 'N/A',
+            totalDue,
+            totalPaid,
+            invoices
+        });
+
+    } catch (err) {
+        console.error("Error in getStudentFeeHistory:", err);
+        res.status(500).json(err);
+    }
+};
+
+const getDefaultersByClass = async (req, res) => {
+    try {
+        const classId = req.params.id;
+
+        // Aggregate invoices to find total due per student
+        const defaulters = await StudentInvoice.aggregate([
+            { $match: { classId: new mongoose.Types.ObjectId(classId) } },
+            {
+                $group: {
+                    _id: "$studentId",
+                    totalAmount: { $sum: "$totalAmount" },
+                    totalLateFine: { $sum: "$lateFine" },
+                    totalPaid: { $sum: "$paidAmount" },
+                    invoices: { $push: "$$ROOT" }
+                }
+            },
+            {
+                $project: {
+                    studentId: "$_id",
+                    totalDue: { $subtract: [{ $add: ["$totalAmount", "$totalLateFine"] }, "$totalPaid"] },
+                    totalPaid: 1
+                }
+            },
+            { $match: { totalDue: { $gt: 0 } } } // Only show students with pending balance
+        ]);
+
+        if (defaulters.length === 0) {
+            return res.send([]);
+        }
+
+        // Populate student details
+        const studentIds = defaulters.map(d => d.studentId);
+        const students = await Student.find({ _id: { $in: studentIds } }, 'name rollNum');
+
+        // Merge student details with aggregated data
+        const result = defaulters.map(defaulter => {
+            const student = students.find(s => s._id.toString() === defaulter.studentId.toString());
+            return {
+                ...defaulter,
+                studentName: student ? student.name : 'Unknown',
+                rollNum: student ? student.rollNum : 'N/A'
+            };
+        });
+
+        res.send(result);
+
+    } catch (err) {
+        console.error("Error in getDefaultersByClass:", err);
+        res.status(500).json(err);
+    }
+};
+
 module.exports = {
     createFeeHead,
     getFeeHeads,
@@ -256,5 +357,8 @@ module.exports = {
     generateInvoices,
     getInvoices,
     payInvoice,
-    getFeeStats
+    getFeeStats,
+    getStudentFeeHistory,
+    getDefaultersByClass
 };
+

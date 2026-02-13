@@ -27,6 +27,13 @@ const feeStructureSchema = new mongoose.Schema({
         type: Number,
         default: 0,
         min: 0
+    },
+    dueDay: {
+        type: Number,
+        min: 1,
+        max: 31,
+        required: true,
+        default: 10 // Default to 10th of the month
     }
 }, { timestamps: true });
 

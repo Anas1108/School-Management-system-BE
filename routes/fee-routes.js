@@ -8,7 +8,8 @@ const {
     generateInvoices,
     getInvoices,
     payInvoice,
-    getFeeStats
+    getFeeStats,
+    getStudentFeeHistory
 } = require('../controllers/fee-controller');
 
 // Fee Head
@@ -26,5 +27,11 @@ router.put('/FeeInvoicePay/:id', payInvoice); // :id = invoiceId
 
 // Stats
 router.get('/FeeStats/:id', getFeeStats); // :id = schoolId (pass ?month=X&year=Y)
+
+// Student Fee History
+router.get('/FeeHistory/:id', getStudentFeeHistory); // :id = studentId
+
+// Fee Defaulters Grouped
+router.get('/FeeDefaulters/:id', require('../controllers/fee-controller').getDefaultersByClass); // :id = classId
 
 module.exports = router;
