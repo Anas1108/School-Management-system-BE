@@ -5,6 +5,7 @@ const dotenv = require("dotenv")
 // const bodyParser = require("body-parser")
 const app = express()
 const Routes = require("./routes/route.js")
+const FeeRoutes = require("./routes/fee-routes.js")
 
 dotenv.config();
 
@@ -36,6 +37,7 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 app.use('/', Routes);
+app.use('/', FeeRoutes);
 
 app.get('/', (req, res) => {
     res.send("Hello to School Management System");
