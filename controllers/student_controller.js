@@ -2,10 +2,64 @@ const bcrypt = require('bcrypt');
 const Student = require('../models/studentSchema.js');
 const Subject = require('../models/subjectSchema.js');
 
+const Family = require('../models/familySchema.js');
+
+const searchFamily = async (req, res) => {
+    try {
+        const { cnic } = req.body;
+        if (!cnic) return res.status(400).json({ message: "CNIC is required" });
+
+        const family = await Family.findOne({ fatherCNIC: cnic });
+        if (family) {
+            res.send({ message: "Family found", family });
+        } else {
+            res.send({ message: "Family not found" });
+        }
+    } catch (err) {
+        res.status(500).json(err);
+    }
+}
+
 const studentRegister = async (req, res) => {
     try {
         const salt = await bcrypt.genSalt(10);
         const hashedPass = await bcrypt.hash(req.body.password, salt);
+
+        const { familyId, familyDetails, ...studentData } = req.body;
+        let finalFamilyId = familyId;
+
+        // Validation for CNIC and BForm
+        const cnicPattern = /^\d{5}-\d{7}-\d{1}$/;
+        if (studentData.studentBForm && !cnicPattern.test(studentData.studentBForm)) {
+            return res.status(400).json({ message: "Invalid Student B-Form format. Use XXXXX-XXXXXXX-X" });
+        }
+
+        // Check if student B-Form already exists
+        const existingBForm = await Student.findOne({ studentBForm: studentData.studentBForm });
+        if (existingBForm) {
+            return res.status(400).json({ message: "Student with this B-Form already exists" });
+        }
+
+        // Case A: New Family
+        if (!finalFamilyId) {
+            if (!familyDetails) return res.status(400).json({ message: "Family details are required for new family" });
+
+            if (familyDetails.fatherCNIC && !cnicPattern.test(familyDetails.fatherCNIC)) {
+                return res.status(400).json({ message: "Invalid Father CNIC format. Use XXXXX-XXXXXXX-X" });
+            }
+
+            const existingFamily = await Family.findOne({ fatherCNIC: familyDetails.fatherCNIC });
+            if (existingFamily) {
+                return res.status(400).json({ message: "Family with this Father CNIC already exists. Please use 'Existing Family' option." });
+            }
+
+            const newFamily = new Family({
+                ...familyDetails,
+                school: req.body.adminID
+            });
+            const savedFamily = await newFamily.save();
+            finalFamilyId = savedFamily._id;
+        }
 
         const existingStudent = await Student.findOne({
             rollNum: req.body.rollNum,
@@ -18,12 +72,16 @@ const studentRegister = async (req, res) => {
         }
         else {
             const student = new Student({
-                ...req.body,
+                ...studentData,
+                familyId: finalFamilyId,
                 school: req.body.adminID,
                 password: hashedPass
             });
 
             let result = await student.save();
+
+            // Update Family with new student ID
+            await Family.findByIdAndUpdate(finalFamilyId, { $push: { students: result._id } });
 
             result.password = undefined;
             res.send(result);
@@ -288,4 +346,5 @@ module.exports = {
     clearAllStudentsAttendance,
     removeStudentAttendanceBySubject,
     removeStudentAttendance,
+    searchFamily
 };
