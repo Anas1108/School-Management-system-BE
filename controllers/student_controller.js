@@ -135,6 +135,7 @@ const getStudentDetail = async (req, res) => {
         let student = await Student.findById(req.params.id)
             .populate("school", "schoolName")
             .populate("sclassName", "sclassName")
+            .populate("familyId") // Populate family details
             .populate("examResult.subName", "subName")
             .populate("attendance.subName", "subName sessions");
         if (student) {
@@ -188,8 +189,17 @@ const updateStudent = async (req, res) => {
     try {
         if (req.body.password) {
             const salt = await bcrypt.genSalt(10)
-            res.body.password = await bcrypt.hash(res.body.password, salt)
+            req.body.password = await bcrypt.hash(req.body.password, salt)
         }
+
+        // Handle Family Update
+        if (req.body.familyDetails && req.body.familyId) {
+            await Family.findByIdAndUpdate(req.body.familyId,
+                { $set: req.body.familyDetails },
+                { new: true }
+            );
+        }
+
         let result = await Student.findByIdAndUpdate(req.params.id,
             { $set: req.body },
             { new: true })
