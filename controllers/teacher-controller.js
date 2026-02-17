@@ -164,6 +164,22 @@ const deleteTeachersByClass = async (req, res) => {
     }
 };
 
+const updateTeacher = async (req, res) => {
+    try {
+        if (req.body.password) {
+            const salt = await bcrypt.genSalt(10)
+            req.body.password = await bcrypt.hash(req.body.password, salt)
+        }
+        let result = await Teacher.findByIdAndUpdate(req.params.id,
+            { $set: req.body },
+            { new: true })
+        result.password = undefined;
+        res.send(result)
+    } catch (error) {
+        res.status(500).json(error);
+    }
+}
+
 const teacherAttendance = async (req, res) => {
     const { status, date } = req.body;
 
@@ -201,5 +217,6 @@ module.exports = {
     deleteTeacher,
     deleteTeachers,
     deleteTeachersByClass,
-    teacherAttendance
+    teacherAttendance,
+    updateTeacher
 };
