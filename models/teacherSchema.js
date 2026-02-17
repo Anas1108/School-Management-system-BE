@@ -31,7 +31,6 @@ const teacherSchema = new mongoose.Schema({
     teachSclass: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'sclass',
-        required: true,
     },
     // New Fields
     employeeId: {
