@@ -2,22 +2,48 @@ const bcrypt = require('bcrypt');
 const Teacher = require('../models/teacherSchema.js');
 const Subject = require('../models/subjectSchema.js');
 
-const teacherRegister = async (req, res) => {
-    const { name, email, password, role, school, teachSubject, teachSclass } = req.body;
-    try {
-        const salt = await bcrypt.genSalt(10);
-        const hashedPass = await bcrypt.hash(password, salt);
+const Department = require('../models/departmentSchema.js');
 
-        const teacher = new Teacher({ name, email, password: hashedPass, role, school, teachSubject, teachSclass });
+const teacherRegister = async (req, res) => {
+    try {
+        const {
+            name, email, password, role, school, teachSubject, teachSclass,
+            phone, cnic, qualification, designation, department, joiningDate, salary,
+            subjectSpecialization, policeVerification, serviceBookNumber
+        } = req.body;
 
         const existingTeacherByEmail = await Teacher.findOne({ email });
 
         if (existingTeacherByEmail) {
             res.send({ message: 'Email already exists' });
-        }
-        else {
+        } else {
+            let departmentId = department;
+            // If department is provided as a name (string), find or create it
+            if (department && typeof department === 'string') {
+                let dept = await Department.findOne({ departmentName: department });
+                if (!dept) {
+                    dept = new Department({ departmentName: department });
+                    await dept.save();
+                }
+                departmentId = dept._id;
+            }
+
+            const teacher = new Teacher({
+                name, email, password, role, school, teachSubject, teachSclass,
+                phone, cnic, qualification, designation,
+                department: departmentId,
+                joiningDate, salary,
+                subjectSpecialization, policeVerification, serviceBookNumber
+            });
+
             let result = await teacher.save();
-            await Subject.findByIdAndUpdate(teachSubject, { teacher: teacher._id });
+            // Assuming teachSubject is a single ID for the "Main" subject?
+            // The schema has subjectSpecialization array too.
+            // Keeping existing logic for teachSubject update
+            if (teachSubject) {
+                await Subject.findByIdAndUpdate(teachSubject, { teacher: teacher._id });
+            }
+
             result.password = undefined;
             res.send(result);
         }
@@ -50,9 +76,21 @@ const teacherLogIn = async (req, res) => {
 
 const getTeachers = async (req, res) => {
     try {
-        let teachers = await Teacher.find({ school: req.params.id })
+        const { department, designation } = req.query; // Get filters from query parameters
+        let query = { school: req.params.id };
+
+        if (department) {
+            query.department = department; // Assuming department ID is passed
+        }
+        if (designation) {
+            query.designation = designation;
+        }
+
+        let teachers = await Teacher.find(query)
             .populate("teachSubject", "subName")
-            .populate("teachSclass", "sclassName");
+            .populate("teachSclass", "sclassName")
+            .populate("department", "departmentName");
+
         if (teachers.length > 0) {
             let modifiedTeachers = teachers.map((teacher) => {
                 return { ...teacher._doc, password: undefined };
@@ -72,6 +110,8 @@ const getTeacherDetail = async (req, res) => {
             .populate("teachSubject", "subName sessions")
             .populate("school", "schoolName")
             .populate("teachSclass", "sclassName")
+            .populate("department", "departmentName");
+
         if (teacher) {
             teacher.password = undefined;
             res.send(teacher);
