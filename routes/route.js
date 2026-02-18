@@ -2,7 +2,7 @@ const router = require('express').Router();
 
 // const { adminRegister, adminLogIn, deleteAdmin, getAdminDetail, updateAdmin } = require('../controllers/admin-controller.js');
 
-const { adminRegister, adminLogIn, getAdminDetail} = require('../controllers/admin-controller.js');
+const { adminRegister, adminLogIn, getAdminDetail } = require('../controllers/admin-controller.js');
 
 const { sclassCreate, sclassList, deleteSclass, deleteSclasses, getSclassDetail, getSclassStudents } = require('../controllers/class-controller.js');
 const { complainCreate, complainList } = require('../controllers/complain-controller.js');
@@ -21,9 +21,10 @@ const {
     clearAllStudentsAttendanceBySubject,
     clearAllStudentsAttendance,
     removeStudentAttendanceBySubject,
-    removeStudentAttendance } = require('../controllers/student_controller.js');
+    removeStudentAttendance,
+    searchFamily } = require('../controllers/student_controller.js');
 const { subjectCreate, classSubjects, deleteSubjectsByClass, getSubjectDetail, deleteSubject, freeSubjectList, allSubjects, deleteSubjects } = require('../controllers/subject-controller.js');
-const { teacherRegister, teacherLogIn, getTeachers, getTeacherDetail, deleteTeachers, deleteTeachersByClass, deleteTeacher, updateTeacherSubject, teacherAttendance } = require('../controllers/teacher-controller.js');
+const { teacherRegister, teacherLogIn, getTeachers, getTeacherDetail, deleteTeachers, deleteTeachersByClass, deleteTeacher, updateTeacherSubject, teacherAttendance, updateTeacher } = require('../controllers/teacher-controller.js');
 
 // Admin
 router.post('/AdminReg', adminRegister);
@@ -37,6 +38,7 @@ router.get("/Admin/:id", getAdminDetail)
 // Student
 
 router.post('/StudentReg', studentRegister);
+router.post('/SearchFamily', searchFamily); // New Route
 router.post('/StudentLogin', studentLogIn)
 
 router.get("/Students/:id", getStudents)
@@ -71,6 +73,8 @@ router.delete("/TeachersClass/:id", deleteTeachersByClass)
 router.delete("/Teacher/:id", deleteTeacher)
 
 router.put("/TeacherSubject", updateTeacherSubject)
+
+router.put("/Teacher/:id", updateTeacher)
 
 router.post('/TeacherAttendance/:id', teacherAttendance)
 
@@ -115,5 +119,14 @@ router.get("/Subject/:id", getSubjectDetail)
 router.delete("/Subject/:id", deleteSubject)
 router.delete("/Subjects/:id", deleteSubjects)
 router.delete("/SubjectsClass/:id", deleteSubjectsByClass)
+
+// Subject Allocation
+// Subject Allocation
+const { allocateSubjects, getTeacherWorkload, getClassAllocations, deleteAllocation, updateAllocation } = require('../controllers/allocation-controller.js');
+router.post('/SubjectAllocation', allocateSubjects);
+router.get('/TeacherWorkload/:id', getTeacherWorkload);
+router.get('/ClassAllocations/:id', getClassAllocations);
+router.delete('/SubjectAllocation/:id', deleteAllocation);
+router.put('/SubjectAllocation/:id', updateAllocation);
 
 module.exports = router;

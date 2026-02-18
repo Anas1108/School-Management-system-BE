@@ -27,6 +27,38 @@ const studentSchema = new mongoose.Schema({
         type: String,
         default: "Student"
     },
+    // New Fields for Family/Guardian Module
+    dateOfBirth: {
+        type: Date,
+        required: true
+    },
+    gender: {
+        type: String,
+        enum: ['Male', 'Female', 'Other'],
+        required: true
+    },
+    studentBForm: {
+        type: String,
+        required: true,
+        unique: true
+    },
+    admissionDate: {
+        type: Date,
+        default: Date.now
+    },
+    religion: {
+        type: String,
+        enum: ['Muslim', 'Non-Muslim'],
+        required: true
+    },
+    bloodGroup: {
+        type: String,
+    },
+    familyId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'family',
+        required: true
+    },
     examResult: [
         {
             subName: {
