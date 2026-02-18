@@ -76,28 +76,64 @@ const teacherLogIn = async (req, res) => {
 
 const getTeachers = async (req, res) => {
     try {
-        const { department, designation } = req.query; // Get filters from query parameters
+        const { page, limit, search } = req.query;
+        // query for filtering by school
         let query = { school: req.params.id };
 
-        if (department) {
-            query.department = department; // Assuming department ID is passed
-        }
-        if (designation) {
-            query.designation = designation;
+        // If specific filters are needed (department/designation), they can be added here
+        // const { department, designation } = req.query;
+        // if (department) query.department = department;
+        // if (designation) query.designation = designation;
+
+        if (search) {
+            const searchRegex = new RegExp(search, 'i');
+            query.$or = [
+                { name: searchRegex },
+                { email: searchRegex }
+            ];
         }
 
-        let teachers = await Teacher.find(query)
-            .populate("teachSubject", "subName")
-            .populate("teachSclass", "sclassName")
-            .populate("department", "departmentName");
+        if (page && limit) {
+            const pageNum = parseInt(page);
+            const limitNum = parseInt(limit);
+            const skip = (pageNum - 1) * limitNum;
 
-        if (teachers.length > 0) {
-            let modifiedTeachers = teachers.map((teacher) => {
-                return { ...teacher._doc, password: undefined };
-            });
-            res.send(modifiedTeachers);
+            const total = await Teacher.countDocuments(query);
+            const teachers = await Teacher.find(query)
+                .populate("teachSubject", "subName")
+                .populate("teachSclass", "sclassName")
+                .populate("department", "departmentName")
+                .skip(skip)
+                .limit(limitNum);
+
+            if (teachers.length > 0) {
+                let modifiedTeachers = teachers.map((teacher) => {
+                    return { ...teacher._doc, password: undefined };
+                });
+                res.send({
+                    teachers: modifiedTeachers,
+                    total,
+                    page: pageNum,
+                    pages: Math.ceil(total / limitNum)
+                });
+            } else {
+                res.send({ message: "No teachers found", teachers: [], total: 0 });
+            }
         } else {
-            res.send({ message: "No teachers found" });
+            // Backward compatibility
+            let teachers = await Teacher.find(query)
+                .populate("teachSubject", "subName")
+                .populate("teachSclass", "sclassName")
+                .populate("department", "departmentName");
+
+            if (teachers.length > 0) {
+                let modifiedTeachers = teachers.map((teacher) => {
+                    return { ...teacher._doc, password: undefined };
+                });
+                res.send(modifiedTeachers);
+            } else {
+                res.send({ message: "No teachers found" });
+            }
         }
     } catch (err) {
         res.status(500).json(err);
