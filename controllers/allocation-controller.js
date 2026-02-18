@@ -76,4 +76,55 @@ const getTeacherWorkload = async (req, res) => {
     }
 };
 
-module.exports = { allocateSubjects, getTeacherWorkload };
+const getClassAllocations = async (req, res) => {
+    try {
+        const { id } = req.params; // Class ID
+        const { schoolId, academicYear } = req.query;
+
+        if (!schoolId || !academicYear) {
+            return res.status(400).json({ message: "School ID and Academic Year are required" });
+        }
+
+        // 1. Fetch all subjects for this class
+        const subjects = await Subject.find({ sclassName: id });
+
+        if (subjects.length === 0) {
+            return res.json([]);
+        }
+
+        // 2. Fetch all allocations for this class and academic year
+        const allocations = await SubjectAllocation.find({
+            classId: id,
+            academicYear,
+            school: schoolId
+        }).populate("teacherId", "name");
+
+        // 3. Map allocations for faster lookup
+        const allocationMap = {};
+        allocations.forEach(alloc => {
+            allocationMap[alloc.subjectId.toString()] = alloc;
+        });
+
+        // 4. Combine data
+        const result = subjects.map(sub => {
+            const alloc = allocationMap[sub._id.toString()];
+            return {
+                subjectName: sub.subName,
+                subjectCode: sub.subCode,
+                subjectId: sub._id,
+                isAllocated: !!alloc,
+                teacherName: alloc ? alloc.teacherId.name : "Not Allocated",
+                teacherId: alloc ? alloc.teacherId._id : null,
+                type: alloc ? alloc.type : null,
+                isClassIncharge: alloc ? alloc.isClassIncharge : false
+            };
+        });
+
+        res.json(result);
+
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+module.exports = { allocateSubjects, getTeacherWorkload, getClassAllocations };

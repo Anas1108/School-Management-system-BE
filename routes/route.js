@@ -121,8 +121,9 @@ router.delete("/Subjects/:id", deleteSubjects)
 router.delete("/SubjectsClass/:id", deleteSubjectsByClass)
 
 // Subject Allocation
-const { allocateSubjects, getTeacherWorkload } = require('../controllers/allocation-controller.js');
+const { allocateSubjects, getTeacherWorkload, getClassAllocations } = require('../controllers/allocation-controller.js');
 router.post('/SubjectAllocation', allocateSubjects);
 router.get('/TeacherWorkload/:id', getTeacherWorkload);
+router.get('/ClassAllocations/:id', getClassAllocations);
 
 module.exports = router;
