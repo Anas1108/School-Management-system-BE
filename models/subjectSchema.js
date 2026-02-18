@@ -9,6 +9,16 @@ const subjectSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
+    totalMarks: {
+        type: Number,
+        default: 100,
+        required: true,
+    },
+    passMarks: {
+        type: Number,
+        default: 33,
+        required: true,
+    },
     sessions: {
         type: String,
         required: true,
