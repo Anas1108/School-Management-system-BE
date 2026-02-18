@@ -116,14 +116,67 @@ const studentLogIn = async (req, res) => {
 
 const getStudents = async (req, res) => {
     try {
-        let students = await Student.find({ school: req.params.id }).populate("sclassName", "sclassName");
-        if (students.length > 0) {
-            let modifiedStudents = students.map((student) => {
-                return { ...student._doc, password: undefined };
-            });
-            res.send(modifiedStudents);
+        const { page, limit, search } = req.query;
+        const schoolId = req.params.id;
+
+        // Base query
+        let query = { school: schoolId };
+
+        // Add search functionality if search term is provided
+        if (search) {
+            const searchRegex = new RegExp(search, 'i');
+            const isNumeric = !isNaN(search);
+            if (isNumeric) {
+                query.$or = [
+                    { name: searchRegex },
+                    { rollNum: search }
+                ];
+            } else {
+                query.$or = [
+                    { name: searchRegex }
+                ];
+            }
+
+            // If rollNum is strictly number in schema, we might need a different approach, 
+            // but usually regex on stringified number works in mongo if stored as string.
+            // Adjusting based on schema assumption (usually mixed or string for rollNum to support dashes etc)
+        }
+
+        if (page && limit) {
+            const pageNum = parseInt(page);
+            const limitNum = parseInt(limit);
+            const skip = (pageNum - 1) * limitNum;
+
+            const total = await Student.countDocuments(query);
+            const students = await Student.find(query)
+                .populate("sclassName", "sclassName")
+                .skip(skip)
+                .limit(limitNum);
+
+            if (students.length > 0) {
+                let modifiedStudents = students.map((student) => {
+                    return { ...student._doc, password: undefined };
+                });
+                res.send({
+                    students: modifiedStudents,
+                    total,
+                    page: pageNum,
+                    pages: Math.ceil(total / limitNum)
+                });
+            } else {
+                res.send({ message: "No students found", students: [], total: 0 });
+            }
         } else {
-            res.send({ message: "No students found" });
+            // Backward compatibility: Validation for existing usages (AdminDashboard etc)
+            let students = await Student.find(query).populate("sclassName", "sclassName");
+            if (students.length > 0) {
+                let modifiedStudents = students.map((student) => {
+                    return { ...student._doc, password: undefined };
+                });
+                res.send(modifiedStudents);
+            } else {
+                res.send({ message: "No students found" });
+            }
         }
     } catch (err) {
         res.status(500).json(err);
