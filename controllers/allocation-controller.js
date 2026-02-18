@@ -113,7 +113,8 @@ const getClassAllocations = async (req, res) => {
                 subjectCode: sub.subCode,
                 subjectId: sub._id,
                 isAllocated: !!alloc,
-                teacherName: alloc ? alloc.teacherId.name : "Not Allocated",
+                allocationId: alloc ? alloc._id : null,
+                teacherName: alloc ? alloc.teacherId.name : "Unassigned",
                 teacherId: alloc ? alloc.teacherId._id : null,
                 type: alloc ? alloc.type : null,
                 isClassIncharge: alloc ? alloc.isClassIncharge : false
@@ -127,4 +128,43 @@ const getClassAllocations = async (req, res) => {
     }
 };
 
-module.exports = { allocateSubjects, getTeacherWorkload, getClassAllocations };
+const deleteAllocation = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const result = await SubjectAllocation.findByIdAndDelete(id);
+        if (!result) {
+            return res.status(404).json({ message: "Allocation not found" });
+        }
+        res.json({ message: "Allocation deleted successfully" });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+const updateAllocation = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { teacherId, type, isClassIncharge } = req.body;
+
+        if (!teacherId) {
+            return res.status(400).json({ message: "Teacher is required" });
+        }
+
+        const allocation = await SubjectAllocation.findById(id);
+        if (!allocation) {
+            return res.status(404).json({ message: "Allocation not found" });
+        }
+
+        allocation.teacherId = teacherId;
+        allocation.type = type || allocation.type; // Keep existing if not provided
+        allocation.isClassIncharge = isClassIncharge !== undefined ? isClassIncharge : allocation.isClassIncharge;
+
+        await allocation.save();
+        res.json({ message: "Allocation updated successfully", result: allocation });
+
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+module.exports = { allocateSubjects, getTeacherWorkload, getClassAllocations, deleteAllocation, updateAllocation };
