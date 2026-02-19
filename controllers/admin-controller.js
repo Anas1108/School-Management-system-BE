@@ -57,8 +57,12 @@ const Complain = require('../models/complainSchema.js');
 
 const adminRegister = async (req, res) => {
     try {
+        const salt = await bcrypt.genSalt(10);
+        const hashedPass = await bcrypt.hash(req.body.password, salt);
+
         const admin = new Admin({
-            ...req.body
+            ...req.body,
+            password: hashedPass
         });
 
         const existingAdminByEmail = await Admin.findOne({ email: req.body.email });
@@ -84,7 +88,8 @@ const adminLogIn = async (req, res) => {
     if (req.body.email && req.body.password) {
         let admin = await Admin.findOne({ email: req.body.email });
         if (admin) {
-            if (req.body.password === admin.password) {
+            const validated = await bcrypt.compare(req.body.password, admin.password);
+            if (validated) {
                 admin.password = undefined;
                 res.send(admin);
             } else {
@@ -130,23 +135,21 @@ const getAdminDetail = async (req, res) => {
 //     }
 // }
 
-// const updateAdmin = async (req, res) => {
-//     try {
-//         if (req.body.password) {
-//             const salt = await bcrypt.genSalt(10)
-//             res.body.password = await bcrypt.hash(res.body.password, salt)
-//         }
-//         let result = await Admin.findByIdAndUpdate(req.params.id,
-//             { $set: req.body },
-//             { new: true })
+const updateAdmin = async (req, res) => {
+    try {
+        if (req.body.password) {
+            const salt = await bcrypt.genSalt(10)
+            req.body.password = await bcrypt.hash(req.body.password, salt)
+        }
+        let result = await Admin.findByIdAndUpdate(req.params.id,
+            { $set: req.body },
+            { new: true })
 
-//         result.password = undefined;
-//         res.send(result)
-//     } catch (error) {
-//         res.status(500).json(err);
-//     }
-// }
+        result.password = undefined;
+        res.send(result)
+    } catch (error) {
+        res.status(500).json(error);
+    }
+}
 
-// module.exports = { adminRegister, adminLogIn, getAdminDetail, deleteAdmin, updateAdmin };
-
-module.exports = { adminRegister, adminLogIn, getAdminDetail };
+module.exports = { adminRegister, adminLogIn, getAdminDetail, updateAdmin };
