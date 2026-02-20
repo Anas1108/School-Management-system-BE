@@ -17,7 +17,7 @@ const studentInvoiceSchema = new mongoose.Schema({
         required: true,
     },
     month: {
-        type: String, // e.g., "September" or "09"
+        type: Number,
         required: true
     },
     year: {
@@ -31,23 +31,27 @@ const studentInvoiceSchema = new mongoose.Schema({
     },
     feeBreakdown: [{
         headName: String,
-        amount: Number
+        amount: { type: Number, min: 0 }
     }],
     previousArrears: {
         type: Number,
-        default: 0
+        default: 0,
+        min: 0
     },
     lateFine: {
         type: Number,
-        default: 0
+        default: 0,
+        min: 0
     },
     totalAmount: {
         type: Number,
-        required: true
+        required: true,
+        min: 0
     },
     paidAmount: {
         type: Number,
-        default: 0
+        default: 0,
+        min: 0
     },
     status: {
         type: String,

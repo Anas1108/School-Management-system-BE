@@ -2,10 +2,10 @@ const router = require('express').Router();
 
 // const { adminRegister, adminLogIn, deleteAdmin, getAdminDetail, updateAdmin } = require('../controllers/admin-controller.js');
 
-const { adminRegister, adminLogIn, getAdminDetail } = require('../controllers/admin-controller.js');
+const { adminRegister, adminLogIn, getAdminDetail, updateAdmin } = require('../controllers/admin-controller.js');
 
 const { sclassCreate, sclassList, deleteSclass, deleteSclasses, getSclassDetail, getSclassStudents } = require('../controllers/class-controller.js');
-const { complainCreate, complainList } = require('../controllers/complain-controller.js');
+const { complainCreate, complainList, complainUpdate, complainListByUser, complainDelete } = require('../controllers/complain-controller.js');
 const { noticeCreate, noticeList, deleteNotices, deleteNotice, updateNotice } = require('../controllers/notice-controller.js');
 const {
     studentRegister,
@@ -33,7 +33,7 @@ router.post('/AdminLogin', adminLogIn);
 router.get("/Admin/:id", getAdminDetail)
 // router.delete("/Admin/:id", deleteAdmin)
 
-// router.put("/Admin/:id", updateAdmin)
+router.put("/Admin/:id", updateAdmin)
 
 // Student
 
@@ -93,7 +93,12 @@ router.put("/Notice/:id", updateNotice)
 
 router.post('/ComplainCreate', complainCreate);
 
+router.put('/ComplainUpdate/:id', complainUpdate);
+
+router.delete('/ComplainDelete/:id', complainDelete);
+
 router.get('/ComplainList/:id', complainList);
+router.get('/ComplainListByUser/:id', complainListByUser);
 
 // Sclass
 
