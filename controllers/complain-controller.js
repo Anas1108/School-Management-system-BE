@@ -22,6 +22,12 @@ const complainList = async (req, res) => {
             }
         });
         if (complains.length > 0) {
+            // Sort by date descending; if dates are equal, sort by creation time (_id)
+            complains.sort((a, b) => {
+                const dateDiff = new Date(b.date) - new Date(a.date);
+                if (dateDiff !== 0) return dateDiff;
+                return String(b._id).localeCompare(String(a._id));
+            });
             res.send(complains)
         } else {
             res.send({ message: "No complains found" });
@@ -53,7 +59,13 @@ const complainListByUser = async (req, res) => {
             }
         });
         if (complains.length > 0) {
-            res.send(complains);
+            // Sort by date descending; if dates are equal, sort by creation time (_id)
+            complains.sort((a, b) => {
+                const dateDiff = new Date(b.date) - new Date(a.date);
+                if (dateDiff !== 0) return dateDiff;
+                return String(b._id).localeCompare(String(a._id));
+            });
+            res.send(complains)
         } else {
             res.send({ message: "No complains found" });
         }
