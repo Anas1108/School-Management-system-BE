@@ -123,13 +123,13 @@ const generateInvoices = async (req, res) => {
                 };
             });
 
-            const totalAmount = currentFee + previousArrears - credit;
+            const totalAmount = currentFee;
 
-            // Challan Number: SCH-YYYY-MM-ID
-            // need padded ID or just part of it. Using last 6 chars of ID for uniqueness
+            // Challan Number: SCH-YYYY-MM-ID-RANDOM to avoid duplicate key errors
             const studIdStr = student._id.toString();
-            const uniqueSuffix = studIdStr.substring(studIdStr.length - 6);
-            const challanNumber = `SCH-${year}-${month}-${uniqueSuffix}`.toUpperCase();
+            const shortId = studIdStr.substring(studIdStr.length - 4).toUpperCase();
+            const randomPart = Math.random().toString(36).substring(2, 6).toUpperCase();
+            const challanNumber = `SCH-${year}-${month}-${shortId}-${randomPart}`;
 
             // Calculate specific due date
             const dueDay = feeStructure.dueDay || 10;
@@ -149,7 +149,7 @@ const generateInvoices = async (req, res) => {
                 previousArrears,
                 totalAmount: totalAmount > 0 ? totalAmount : 0, // Should not be negative
                 dueDate,
-                status: totalAmount <= 0 ? 'Paid' : 'Unpaid' // If covered by credit
+                status: totalAmount <= 0 ? 'Paid' : 'Unpaid'
             });
 
             invoices.push(invoice);
