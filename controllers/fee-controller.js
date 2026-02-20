@@ -8,6 +8,15 @@ const Sclass = require('../models/sclassSchema');
 // Fee Head Management
 const createFeeHead = async (req, res) => {
     try {
+        const existingHead = await FeeHead.findOne({
+            name: { $regex: new RegExp(`^${req.body.name}$`, 'i') },
+            school: req.body.adminID
+        });
+
+        if (existingHead) {
+            return res.status(400).json({ message: "Fee head with this name already exists" });
+        }
+
         const feeHead = new FeeHead({
             ...req.body,
             school: req.body.adminID
@@ -184,6 +193,10 @@ const payInvoice = async (req, res) => {
         const invoice = await StudentInvoice.findById(req.params.id);
         if (!invoice) return res.status(404).json({ message: "Invoice not found" });
 
+        if (!amount || parseFloat(amount) <= 0) {
+            return res.status(400).json({ message: "Payment amount must be greater than zero" });
+        }
+
         // Check for late fee
         const paymentDate = new Date(date);
         const dueDate = new Date(invoice.dueDate);
@@ -195,8 +208,18 @@ const payInvoice = async (req, res) => {
             lateFineToAdd = feeStructure ? feeStructure.lateFee : 0;
         }
 
-        invoice.lateFine = lateFineToAdd;
-        invoice.paidAmount += parseInt(amount);
+        if (lateFineToAdd > 0) {
+            invoice.lateFine = lateFineToAdd;
+        }
+
+        const totalDueBeforePayment = (invoice.totalAmount + invoice.lateFine) - invoice.paidAmount;
+        const paymentValue = parseFloat(amount);
+
+        if (paymentValue > totalDueBeforePayment) {
+            return res.status(400).json({ message: `Payment exceeds total due amount of ${totalDueBeforePayment}` });
+        }
+
+        invoice.paidAmount += paymentValue;
         invoice.paymentDate = date;
 
         const totalDue = invoice.totalAmount + invoice.lateFine;
