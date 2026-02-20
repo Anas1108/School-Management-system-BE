@@ -12,7 +12,15 @@ const complainCreate = async (req, res) => {
 
 const complainList = async (req, res) => {
     try {
-        let complains = await Complain.find({ school: req.params.id }).populate("user", "name");
+        let complains = await Complain.find({ school: req.params.id }).populate({
+            path: 'user',
+            select: 'name rollNum sclassName',
+            populate: {
+                path: 'sclassName',
+                select: 'sclassName',
+                strictPopulate: false // Allow population even if field doesn't exist on all docs (e.g. Teachers)
+            }
+        });
         if (complains.length > 0) {
             res.send(complains)
         } else {
@@ -23,4 +31,44 @@ const complainList = async (req, res) => {
     }
 };
 
-module.exports = { complainCreate, complainList };
+const complainUpdate = async (req, res) => {
+    try {
+        const { status, relatedAdminResponse } = req.body;
+        const result = await Complain.findByIdAndUpdate(req.params.id, { status, relatedAdminResponse }, { new: true });
+        res.send(result);
+    } catch (err) {
+        res.status(500).json(err);
+    }
+};
+
+const complainListByUser = async (req, res) => {
+    try {
+        let complains = await Complain.find({ user: req.params.id }).populate({
+            path: 'user',
+            select: 'name rollNum sclassName',
+            populate: {
+                path: 'sclassName',
+                select: 'sclassName',
+                strictPopulate: false // Allow population even if field doesn't exist on all docs (e.g. Teachers)
+            }
+        });
+        if (complains.length > 0) {
+            res.send(complains);
+        } else {
+            res.send({ message: "No complains found" });
+        }
+    } catch (err) {
+        res.status(500).json(err);
+    }
+};
+
+const complainDelete = async (req, res) => {
+    try {
+        const result = await Complain.findByIdAndDelete(req.params.id);
+        res.send(result);
+    } catch (err) {
+        res.status(500).json(err);
+    }
+};
+
+module.exports = { complainCreate, complainList, complainUpdate, complainListByUser, complainDelete };
