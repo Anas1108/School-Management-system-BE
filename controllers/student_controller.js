@@ -3,6 +3,8 @@ const Student = require('../models/studentSchema.js');
 const Subject = require('../models/subjectSchema.js');
 
 const Family = require('../models/familySchema.js');
+const FeeStructure = require('../models/feeStructureSchema.js');
+const StudentInvoice = require('../models/studentInvoiceSchema.js');
 
 const searchFamily = async (req, res) => {
     try {
@@ -253,9 +255,79 @@ const updateStudent = async (req, res) => {
             );
         }
 
+        const oldStudent = await Student.findById(req.params.id);
+
         let result = await Student.findByIdAndUpdate(req.params.id,
             { $set: req.body },
             { new: true })
+
+        // Check if class changed
+        if (req.body.sclassName && oldStudent.sclassName.toString() !== req.body.sclassName.toString()) {
+            const currentDate = new Date();
+            const month = currentDate.getMonth() + 1;
+            const year = currentDate.getFullYear();
+
+            // Find current month's unpaid invoice
+            const existingInvoice = await StudentInvoice.findOne({
+                studentId: req.params.id,
+                month,
+                year,
+                status: 'Unpaid'
+            });
+
+            if (existingInvoice) {
+                await StudentInvoice.findByIdAndDelete(existingInvoice._id);
+
+                // Generate new invoice for new class
+                const feeStructure = await FeeStructure.findOne({ classId: req.body.sclassName }).populate('feeHeads.headId');
+
+                if (feeStructure) {
+                    // Calculate previous arrears
+                    const previousInvoices = await StudentInvoice.find({ studentId: req.params.id });
+                    let balance = 0;
+                    previousInvoices.forEach(inv => {
+                        balance += (inv.totalAmount + inv.lateFine) - inv.paidAmount;
+                    });
+
+                    let previousArrears = balance > 0 ? balance : 0;
+
+                    let currentFee = 0;
+                    const detailedBreakdown = feeStructure.feeHeads.map(head => {
+                        currentFee += head.amount;
+                        return {
+                            headName: head.headId.name,
+                            amount: head.amount
+                        };
+                    });
+
+                    const studIdStr = req.params.id.toString();
+                    const shortId = studIdStr.substring(studIdStr.length - 4).toUpperCase();
+                    const randomPart = Math.random().toString(36).substring(2, 6).toUpperCase();
+                    const challanNumber = `SCH-${year}-${month}-${shortId}-${randomPart}`;
+
+                    const dueDay = feeStructure.dueDay || 10;
+                    const daysInMonth = new Date(year, month, 0).getDate();
+                    const actualDueDay = Math.min(dueDay, daysInMonth);
+                    const dueDate = new Date(year, month - 1, actualDueDay);
+
+                    const newInvoice = new StudentInvoice({
+                        studentId: req.params.id,
+                        school: result.school,
+                        classId: req.body.sclassName,
+                        month,
+                        year,
+                        challanNumber,
+                        feeBreakdown: detailedBreakdown,
+                        previousArrears,
+                        totalAmount: currentFee > 0 ? currentFee : 0,
+                        dueDate,
+                        status: currentFee <= 0 ? 'Paid' : 'Unpaid'
+                    });
+
+                    await newInvoice.save();
+                }
+            }
+        }
 
         result.password = undefined;
         res.send(result)

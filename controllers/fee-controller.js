@@ -5,6 +5,37 @@ const StudentInvoice = require('../models/studentInvoiceSchema');
 const Student = require('../models/studentSchema');
 const Sclass = require('../models/sclassSchema');
 
+const updateLateFines = async (query) => {
+    try {
+        const currentDate = new Date();
+        const pendingInvoices = await StudentInvoice.find({
+            ...query,
+            status: { $ne: 'Paid' },
+            lateFine: 0,
+            dueDate: { $lt: currentDate }
+        });
+
+        if (pendingInvoices.length > 0) {
+            const classIds = [...new Set(pendingInvoices.map(inv => inv.classId.toString()))];
+            for (const cId of classIds) {
+                const feeStructure = await FeeStructure.findOne({ classId: cId });
+                if (feeStructure && feeStructure.lateFee > 0) {
+                    await StudentInvoice.updateMany(
+                        {
+                            _id: { $in: pendingInvoices.filter(inv => inv.classId.toString() === cId).map(inv => inv._id) }
+                        },
+                        {
+                            $set: { lateFine: feeStructure.lateFee }
+                        }
+                    );
+                }
+            }
+        }
+    } catch (error) {
+        console.error("Error updating late fines:", error);
+    }
+};
+
 // Fee Head Management
 const createFeeHead = async (req, res) => {
     try {
@@ -31,6 +62,31 @@ const createFeeHead = async (req, res) => {
 const getFeeHeads = async (req, res) => {
     try {
         const result = await FeeHead.find({ school: req.params.id });
+        res.send(result);
+    } catch (err) {
+        res.status(500).json(err);
+    }
+};
+
+const updateFeeHead = async (req, res) => {
+    try {
+        const result = await FeeHead.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        res.send(result);
+    } catch (err) {
+        res.status(500).json(err);
+    }
+};
+
+const deleteFeeHead = async (req, res) => {
+    try {
+        const headId = req.params.id;
+        // Check if any fee structure uses this head before deleting
+        const usages = await FeeStructure.find({ "feeHeads.headId": headId });
+        if (usages.length > 0) {
+            return res.status(400).json({ message: "Cannot delete Fee Head because it is being used in a Class Fee Structure. Remove it from the structure first." });
+        }
+
+        const result = await FeeHead.findByIdAndDelete(headId);
         res.send(result);
     } catch (err) {
         res.status(500).json(err);
@@ -177,6 +233,8 @@ const getInvoices = async (req, res) => {
             query.year = year;
         }
 
+        await updateLateFines(query);
+
         const invoices = await StudentInvoice.find(query)
             .populate('studentId', 'name rollNum')
             .sort({ createdAt: -1 });
@@ -265,6 +323,8 @@ const getFeeStats = async (req, res) => {
             match.year = parseInt(year);
         }
 
+        await updateLateFines({ school: schoolId });
+
         const stats = await StudentInvoice.aggregate([
             { $match: match },
             {
@@ -294,6 +354,8 @@ const getStudentFeeHistory = async (req, res) => {
             return res.status(404).json({ message: "Student not found" });
         }
 
+        await updateLateFines({ studentId });
+
         const invoices = await StudentInvoice.find({ studentId })
             .sort({ year: -1, month: -1 }); // Latest first
 
@@ -308,6 +370,7 @@ const getStudentFeeHistory = async (req, res) => {
 
         res.send({
             studentName: student.name,
+            rollNum: student.rollNum,
             className: student.sclassName ? student.sclassName.sclassName : 'N/A',
             totalDue,
             totalPaid,
@@ -323,6 +386,8 @@ const getStudentFeeHistory = async (req, res) => {
 const getDefaultersByClass = async (req, res) => {
     try {
         const classId = req.params.id;
+
+        await updateLateFines({ classId });
 
         // Aggregate invoices to find total due per student
         const defaulters = await StudentInvoice.aggregate([
@@ -392,6 +457,8 @@ const searchStudentsFees = async (req, res) => {
 
         const studentIds = students.map(s => s._id);
 
+        await updateLateFines({ studentId: { $in: studentIds } });
+
         // Aggregate invoices for these students
         const feeData = await StudentInvoice.aggregate([
             { $match: { studentId: { $in: studentIds } } },
@@ -433,6 +500,8 @@ const searchStudentsFees = async (req, res) => {
 module.exports = {
     createFeeHead,
     getFeeHeads,
+    updateFeeHead,
+    deleteFeeHead,
     createFeeStructure,
     getFeeStructure,
     generateInvoices,
