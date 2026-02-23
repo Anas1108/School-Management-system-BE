@@ -33,6 +33,10 @@ const studentInvoiceSchema = new mongoose.Schema({
         headName: String,
         amount: { type: Number, min: 0 }
     }],
+    discountBreakdown: [{
+        discountName: String,
+        amount: { type: Number, min: 0 }
+    }],
     previousArrears: {
         type: Number,
         default: 0,

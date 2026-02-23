@@ -4,6 +4,7 @@ const FeeStructure = require('../models/feeStructureSchema');
 const StudentInvoice = require('../models/studentInvoiceSchema');
 const Student = require('../models/studentSchema');
 const Sclass = require('../models/sclassSchema');
+const StudentDiscount = require('../models/studentDiscountSchema');
 
 const updateLateFines = async (query) => {
     try {
@@ -179,7 +180,28 @@ const generateInvoices = async (req, res) => {
                 };
             });
 
-            const totalAmount = currentFee;
+            // Calculate Discounts
+            const discounts = await StudentDiscount.find({ studentId: student._id, status: 'Active' }).populate('discountGroup');
+            let totalDiscount = 0;
+            const discountBreakdown = discounts.map(discount => {
+                let discountName = discount.discountGroup ? discount.discountGroup.name : discount.customName;
+                let amount = 0;
+                if (discount.type === 'Percentage') {
+                    amount = (currentFee * discount.value) / 100;
+                } else if (discount.type === 'FixedAmount') {
+                    amount = discount.value;
+                }
+                totalDiscount += amount;
+                return {
+                    discountName,
+                    amount
+                };
+            });
+
+            let finalAmount = currentFee - totalDiscount;
+            if (finalAmount < 0) finalAmount = 0;
+
+            const totalAmount = finalAmount;
 
             // Challan Number: SCH-YYYY-MM-ID-RANDOM to avoid duplicate key errors
             const studIdStr = student._id.toString();
@@ -202,6 +224,7 @@ const generateInvoices = async (req, res) => {
                 year,
                 challanNumber,
                 feeBreakdown: detailedBreakdown,
+                discountBreakdown: discountBreakdown,
                 previousArrears,
                 totalAmount: totalAmount > 0 ? totalAmount : 0, // Should not be negative
                 dueDate,
