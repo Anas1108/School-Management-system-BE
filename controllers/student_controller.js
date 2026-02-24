@@ -495,6 +495,38 @@ const getFamilyDetails = async (req, res) => {
 }
 
 
+const familyCreate = async (req, res) => {
+    try {
+        const { familyName, fatherName, fatherPhone, homeAddress, adminID, ...otherDetails } = req.body;
+
+        if (!familyName || !fatherName || !fatherPhone || !homeAddress) {
+            return res.send({ message: "Family Name, Father Name, Father Phone, and Home Address are required" });
+        }
+
+        // Optional validation for CNIC limit
+        if (otherDetails.fatherCNIC) {
+            const cnicPattern = /^\d{5}-\d{7}-\d{1}$/;
+            if (!cnicPattern.test(otherDetails.fatherCNIC)) {
+                return res.send({ message: "Invalid Father CNIC format. Use XXXXX-XXXXXXX-X" });
+            }
+        }
+
+        const newFamily = new Family({
+            familyName,
+            fatherName,
+            fatherPhone,
+            homeAddress,
+            school: adminID,
+            ...otherDetails
+        });
+
+        const savedFamily = await newFamily.save();
+        res.send(savedFamily);
+    } catch (err) {
+        res.status(500).json(err);
+    }
+}
+
 module.exports = {
     studentRegister,
     studentLogIn,
@@ -513,5 +545,6 @@ module.exports = {
     removeStudentAttendance,
     searchFamily,
     getAllFamilies,
-    getFamilyDetails
+    getFamilyDetails,
+    familyCreate
 };
