@@ -1,6 +1,7 @@
 const Subject = require('../models/subjectSchema.js');
 const Teacher = require('../models/teacherSchema.js');
 const Student = require('../models/studentSchema.js');
+const SubjectAllocation = require('../models/allocationSchema.js');
 
 const subjectCreate = async (req, res) => {
     try {
@@ -35,9 +36,26 @@ const subjectCreate = async (req, res) => {
 const allSubjects = async (req, res) => {
     try {
         let subjects = await Subject.find({ school: req.params.id })
-            .populate("sclassName", "sclassName")
+            .populate("sclassName", "sclassName");
+
         if (subjects.length > 0) {
-            res.send(subjects)
+            // Fetch all allocations for this school
+            const allocations = await SubjectAllocation.find({ school: req.params.id, type: 'Primary' }).populate("teacherId", "name");
+            const allocationMap = {};
+            allocations.forEach(alloc => {
+                allocationMap[alloc.subjectId.toString()] = alloc;
+            });
+
+            const subjectsWithTeachers = subjects.map(sub => {
+                const subObj = sub.toObject();
+                const alloc = allocationMap[sub._id.toString()];
+                if (alloc && alloc.teacherId) {
+                    subObj.teacher = alloc.teacherId;
+                }
+                return subObj;
+            });
+
+            res.send(subjectsWithTeachers);
         } else {
             res.send({ message: "No subjects found" });
         }
@@ -49,8 +67,25 @@ const allSubjects = async (req, res) => {
 const classSubjects = async (req, res) => {
     try {
         let subjects = await Subject.find({ sclassName: req.params.id })
+            .populate("sclassName", "sclassName"); // Added populate for consistency
+
         if (subjects.length > 0) {
-            res.send(subjects)
+            const allocations = await SubjectAllocation.find({ classId: req.params.id, type: 'Primary' }).populate("teacherId", "name");
+            const allocationMap = {};
+            allocations.forEach(alloc => {
+                allocationMap[alloc.subjectId.toString()] = alloc;
+            });
+
+            const subjectsWithTeachers = subjects.map(sub => {
+                const subObj = sub.toObject();
+                const alloc = allocationMap[sub._id.toString()];
+                if (alloc && alloc.teacherId) {
+                    subObj.teacher = alloc.teacherId;
+                }
+                return subObj;
+            });
+
+            res.send(subjectsWithTeachers);
         } else {
             res.send({ message: "No subjects found" });
         }
@@ -61,9 +96,24 @@ const classSubjects = async (req, res) => {
 
 const freeSubjectList = async (req, res) => {
     try {
-        let subjects = await Subject.find({ sclassName: req.params.id, teacher: { $exists: false } });
+        // Find all subjects for the class
+        let subjects = await Subject.find({ sclassName: req.params.id });
+
         if (subjects.length > 0) {
-            res.send(subjects);
+            // Find all primary allocations for this class
+            const allocations = await SubjectAllocation.find({ classId: req.params.id, type: 'Primary' });
+
+            // Create a set of subject IDs that are already allocated
+            const allocatedSubjectIds = new Set(allocations.map(alloc => alloc.subjectId.toString()));
+
+            // Filter subjects to only those that are NOT in the allocated set
+            const freeSubjects = subjects.filter(sub => !allocatedSubjectIds.has(sub._id.toString()));
+
+            if (freeSubjects.length > 0) {
+                res.send(freeSubjects);
+            } else {
+                res.send({ message: "No subjects found" });
+            }
         } else {
             res.send({ message: "No subjects found" });
         }
@@ -76,8 +126,20 @@ const getSubjectDetail = async (req, res) => {
     try {
         let subject = await Subject.findById(req.params.id);
         if (subject) {
-            subject = await subject.populate("sclassName", "sclassName")
-            subject = await subject.populate("teacher", "name")
+            subject = await subject.populate("sclassName", "sclassName");
+
+            // Look up teacher in SubjectAllocation table dynamically
+            const allocation = await SubjectAllocation.findOne({ subjectId: subject._id, type: 'Primary' }).populate("teacherId", "name");
+
+            // Convert Mongoose document to plain object to attach teacher dynamically
+            subject = subject.toObject();
+            if (allocation && allocation.teacherId) {
+                subject.teacher = allocation.teacherId;
+            } else if (subject.teacher) { // Fallback to old field
+                const teacherObj = await Teacher.findById(subject.teacher).select("name");
+                if (teacherObj) subject.teacher = teacherObj;
+            }
+
             res.send(subject);
         }
         else {
