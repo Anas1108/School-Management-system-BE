@@ -1,14 +1,16 @@
 const mongoose = require('mongoose');
 
 const familySchema = new mongoose.Schema({
+    familyName: {
+        type: String,
+        required: true
+    },
     fatherName: {
         type: String,
         required: true
     },
     fatherCNIC: {
         type: String,
-        required: true,
-        unique: true
     },
     fatherPhone: {
         type: String,

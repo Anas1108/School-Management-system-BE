@@ -8,12 +8,14 @@ const StudentInvoice = require('../models/studentInvoiceSchema.js');
 
 const searchFamily = async (req, res) => {
     try {
-        const { cnic } = req.body;
-        if (!cnic) return res.status(400).json({ message: "CNIC is required" });
+        const { familyName } = req.body;
+        if (!familyName) return res.send({ message: "Family Name is required" });
 
-        const family = await Family.findOne({ fatherCNIC: cnic });
-        if (family) {
-            res.send({ message: "Family found", family });
+        const searchRegex = new RegExp(familyName, 'i');
+        const families = await Family.find({ familyName: searchRegex });
+
+        if (families.length > 0) {
+            res.send({ message: "Family found", families });
         } else {
             res.send({ message: "Family not found" });
         }
@@ -33,26 +35,21 @@ const studentRegister = async (req, res) => {
         // Validation for CNIC and BForm
         const cnicPattern = /^\d{5}-\d{7}-\d{1}$/;
         if (studentData.studentBForm && !cnicPattern.test(studentData.studentBForm)) {
-            return res.status(400).json({ message: "Invalid Student B-Form format. Use XXXXX-XXXXXXX-X" });
+            return res.send({ message: "Invalid Student B-Form format. Use XXXXX-XXXXXXX-X" });
         }
 
         // Check if student B-Form already exists
         const existingBForm = await Student.findOne({ studentBForm: studentData.studentBForm });
         if (existingBForm) {
-            return res.status(400).json({ message: "Student with this B-Form already exists" });
+            return res.send({ message: "Student with this B-Form already exists" });
         }
 
         // Case A: New Family
         if (!finalFamilyId) {
-            if (!familyDetails) return res.status(400).json({ message: "Family details are required for new family" });
+            if (!familyDetails) return res.send({ message: "Family details are required for new family" });
 
             if (familyDetails.fatherCNIC && !cnicPattern.test(familyDetails.fatherCNIC)) {
-                return res.status(400).json({ message: "Invalid Father CNIC format. Use XXXXX-XXXXXXX-X" });
-            }
-
-            const existingFamily = await Family.findOne({ fatherCNIC: familyDetails.fatherCNIC });
-            if (existingFamily) {
-                return res.status(400).json({ message: "Family with this Father CNIC already exists. Please use 'Existing Family' option." });
+                return res.send({ message: "Invalid Father CNIC format. Use XXXXX-XXXXXXX-X" });
             }
 
             const newFamily = new Family({
@@ -465,6 +462,39 @@ const removeStudentAttendance = async (req, res) => {
 };
 
 
+const getAllFamilies = async (req, res) => {
+    try {
+        const schoolId = req.params.id;
+        const families = await Family.find({ school: schoolId });
+        res.send(families);
+    } catch (err) {
+        res.status(500).json(err);
+    }
+}
+
+const getFamilyDetails = async (req, res) => {
+    try {
+        const family = await Family.findById(req.params.id).populate("students", "name rollNum sclassName");
+        if (family) {
+            // Populate classes for students if needed, but since it's just sclassName we might want to populate that inside
+            const populatedFamily = await Family.findById(req.params.id).populate({
+                path: 'students',
+                select: 'name rollNum sclassName',
+                populate: {
+                    path: 'sclassName',
+                    select: 'sclassName'
+                }
+            });
+            res.send(populatedFamily);
+        } else {
+            res.send({ message: "Family not found" });
+        }
+    } catch (err) {
+        res.status(500).json(err);
+    }
+}
+
+
 module.exports = {
     studentRegister,
     studentLogIn,
@@ -481,5 +511,7 @@ module.exports = {
     clearAllStudentsAttendance,
     removeStudentAttendanceBySubject,
     removeStudentAttendance,
-    searchFamily
+    searchFamily,
+    getAllFamilies,
+    getFamilyDetails
 };
