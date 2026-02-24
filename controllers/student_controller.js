@@ -3,15 +3,19 @@ const Student = require('../models/studentSchema.js');
 const Subject = require('../models/subjectSchema.js');
 
 const Family = require('../models/familySchema.js');
+const FeeStructure = require('../models/feeStructureSchema.js');
+const StudentInvoice = require('../models/studentInvoiceSchema.js');
 
 const searchFamily = async (req, res) => {
     try {
-        const { cnic } = req.body;
-        if (!cnic) return res.status(400).json({ message: "CNIC is required" });
+        const { familyName } = req.body;
+        if (!familyName) return res.send({ message: "Family Name is required" });
 
-        const family = await Family.findOne({ fatherCNIC: cnic });
-        if (family) {
-            res.send({ message: "Family found", family });
+        const searchRegex = new RegExp(familyName, 'i');
+        const families = await Family.find({ familyName: searchRegex });
+
+        if (families.length > 0) {
+            res.send({ message: "Family found", families });
         } else {
             res.send({ message: "Family not found" });
         }
@@ -31,26 +35,21 @@ const studentRegister = async (req, res) => {
         // Validation for CNIC and BForm
         const cnicPattern = /^\d{5}-\d{7}-\d{1}$/;
         if (studentData.studentBForm && !cnicPattern.test(studentData.studentBForm)) {
-            return res.status(400).json({ message: "Invalid Student B-Form format. Use XXXXX-XXXXXXX-X" });
+            return res.send({ message: "Invalid Student B-Form format. Use XXXXX-XXXXXXX-X" });
         }
 
         // Check if student B-Form already exists
         const existingBForm = await Student.findOne({ studentBForm: studentData.studentBForm });
         if (existingBForm) {
-            return res.status(400).json({ message: "Student with this B-Form already exists" });
+            return res.send({ message: "Student with this B-Form already exists" });
         }
 
         // Case A: New Family
         if (!finalFamilyId) {
-            if (!familyDetails) return res.status(400).json({ message: "Family details are required for new family" });
+            if (!familyDetails) return res.send({ message: "Family details are required for new family" });
 
             if (familyDetails.fatherCNIC && !cnicPattern.test(familyDetails.fatherCNIC)) {
-                return res.status(400).json({ message: "Invalid Father CNIC format. Use XXXXX-XXXXXXX-X" });
-            }
-
-            const existingFamily = await Family.findOne({ fatherCNIC: familyDetails.fatherCNIC });
-            if (existingFamily) {
-                return res.status(400).json({ message: "Family with this Father CNIC already exists. Please use 'Existing Family' option." });
+                return res.send({ message: "Invalid Father CNIC format. Use XXXXX-XXXXXXX-X" });
             }
 
             const newFamily = new Family({
@@ -253,9 +252,79 @@ const updateStudent = async (req, res) => {
             );
         }
 
+        const oldStudent = await Student.findById(req.params.id);
+
         let result = await Student.findByIdAndUpdate(req.params.id,
             { $set: req.body },
             { new: true })
+
+        // Check if class changed
+        if (req.body.sclassName && oldStudent.sclassName.toString() !== req.body.sclassName.toString()) {
+            const currentDate = new Date();
+            const month = currentDate.getMonth() + 1;
+            const year = currentDate.getFullYear();
+
+            // Find current month's unpaid invoice
+            const existingInvoice = await StudentInvoice.findOne({
+                studentId: req.params.id,
+                month,
+                year,
+                status: 'Unpaid'
+            });
+
+            if (existingInvoice) {
+                await StudentInvoice.findByIdAndDelete(existingInvoice._id);
+
+                // Generate new invoice for new class
+                const feeStructure = await FeeStructure.findOne({ classId: req.body.sclassName }).populate('feeHeads.headId');
+
+                if (feeStructure) {
+                    // Calculate previous arrears
+                    const previousInvoices = await StudentInvoice.find({ studentId: req.params.id });
+                    let balance = 0;
+                    previousInvoices.forEach(inv => {
+                        balance += (inv.totalAmount + inv.lateFine) - inv.paidAmount;
+                    });
+
+                    let previousArrears = balance > 0 ? balance : 0;
+
+                    let currentFee = 0;
+                    const detailedBreakdown = feeStructure.feeHeads.map(head => {
+                        currentFee += head.amount;
+                        return {
+                            headName: head.headId.name,
+                            amount: head.amount
+                        };
+                    });
+
+                    const studIdStr = req.params.id.toString();
+                    const shortId = studIdStr.substring(studIdStr.length - 4).toUpperCase();
+                    const randomPart = Math.random().toString(36).substring(2, 6).toUpperCase();
+                    const challanNumber = `SCH-${year}-${month}-${shortId}-${randomPart}`;
+
+                    const dueDay = feeStructure.dueDay || 10;
+                    const daysInMonth = new Date(year, month, 0).getDate();
+                    const actualDueDay = Math.min(dueDay, daysInMonth);
+                    const dueDate = new Date(year, month - 1, actualDueDay);
+
+                    const newInvoice = new StudentInvoice({
+                        studentId: req.params.id,
+                        school: result.school,
+                        classId: req.body.sclassName,
+                        month,
+                        year,
+                        challanNumber,
+                        feeBreakdown: detailedBreakdown,
+                        previousArrears,
+                        totalAmount: currentFee > 0 ? currentFee : 0,
+                        dueDate,
+                        status: currentFee <= 0 ? 'Paid' : 'Unpaid'
+                    });
+
+                    await newInvoice.save();
+                }
+            }
+        }
 
         result.password = undefined;
         res.send(result)
@@ -393,6 +462,100 @@ const removeStudentAttendance = async (req, res) => {
 };
 
 
+const getAllFamilies = async (req, res) => {
+    try {
+        const schoolId = req.params.id;
+        const families = await Family.find({ school: schoolId });
+        res.send(families);
+    } catch (err) {
+        res.status(500).json(err);
+    }
+}
+
+const getFamilyDetails = async (req, res) => {
+    try {
+        const family = await Family.findById(req.params.id).populate("students", "name rollNum sclassName");
+        if (family) {
+            // Populate classes for students if needed, but since it's just sclassName we might want to populate that inside
+            const populatedFamily = await Family.findById(req.params.id).populate({
+                path: 'students',
+                select: 'name rollNum sclassName',
+                populate: {
+                    path: 'sclassName',
+                    select: 'sclassName'
+                }
+            });
+            res.send(populatedFamily);
+        } else {
+            res.send({ message: "Family not found" });
+        }
+    } catch (err) {
+        res.status(500).json(err);
+    }
+}
+
+
+const familyCreate = async (req, res) => {
+    try {
+        const { familyName, fatherName, fatherPhone, homeAddress, adminID, ...otherDetails } = req.body;
+
+        if (!familyName || !fatherName || !fatherPhone || !homeAddress) {
+            return res.send({ message: "Family Name, Father Name, Father Phone, and Home Address are required" });
+        }
+
+        // Optional validation for CNIC limit
+        if (otherDetails.fatherCNIC) {
+            const cnicPattern = /^\d{5}-\d{7}-\d{1}$/;
+            if (!cnicPattern.test(otherDetails.fatherCNIC)) {
+                return res.send({ message: "Invalid Father CNIC format. Use XXXXX-XXXXXXX-X" });
+            }
+        }
+
+        const newFamily = new Family({
+            familyName,
+            fatherName,
+            fatherPhone,
+            homeAddress,
+            school: adminID,
+            ...otherDetails
+        });
+
+        const savedFamily = await newFamily.save();
+        res.send(savedFamily);
+    } catch (err) {
+        res.status(500).json(err);
+    }
+}
+
+const updateFamily = async (req, res) => {
+    try {
+        const result = await Family.findByIdAndUpdate(req.params.id,
+            { $set: req.body },
+            { new: true }
+        );
+        res.send(result);
+    } catch (error) {
+        res.status(500).json(error);
+    }
+}
+
+const deleteFamily = async (req, res) => {
+    try {
+        const family = await Family.findById(req.params.id);
+        if (!family) {
+            return res.send({ message: "Family not found" });
+        }
+        if (family.students && family.students.length > 0) {
+            return res.send({ message: "Cannot delete family because students are still enrolled." });
+        }
+
+        const result = await Family.findByIdAndDelete(req.params.id);
+        res.send(result);
+    } catch (error) {
+        res.status(500).json(error);
+    }
+}
+
 module.exports = {
     studentRegister,
     studentLogIn,
@@ -409,5 +572,10 @@ module.exports = {
     clearAllStudentsAttendance,
     removeStudentAttendanceBySubject,
     removeStudentAttendance,
-    searchFamily
+    searchFamily,
+    getAllFamilies,
+    getFamilyDetails,
+    familyCreate,
+    updateFamily,
+    deleteFamily
 };

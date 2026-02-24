@@ -16,6 +16,8 @@ const {
 // Fee Head
 router.post('/FeeHeadCreate', createFeeHead);
 router.get('/FeeHeads/:id', getFeeHeads); // :id = schoolId
+router.put('/FeeHeadUpdate/:id', require('../controllers/fee-controller').updateFeeHead); // :id = headId
+router.delete('/FeeHeadDelete/:id', require('../controllers/fee-controller').deleteFeeHead); // :id = headId
 
 // Fee Structure
 router.post('/FeeStructureCreate', createFeeStructure);
