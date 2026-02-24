@@ -101,5 +101,30 @@ const deleteSclasses = async (req, res) => {
     }
 }
 
+const updateSclass = async (req, res) => {
+    try {
+        const { sclassName } = req.body;
+        const currentClass = await Sclass.findById(req.params.id);
 
-module.exports = { sclassCreate, sclassList, deleteSclass, deleteSclasses, getSclassDetail, getSclassStudents };
+        if (!currentClass) {
+            return res.send({ message: "Class not found" });
+        }
+
+        const existingSclassByName = await Sclass.findOne({
+            sclassName: sclassName,
+            school: currentClass.school
+        });
+
+        if (existingSclassByName && existingSclassByName._id.toString() !== req.params.id) {
+            return res.send({ message: 'Sorry this class name already exists' });
+        }
+
+        const updatedClass = await Sclass.findByIdAndUpdate(req.params.id, { sclassName }, { new: true });
+        res.send(updatedClass);
+    } catch (error) {
+        res.status(500).json(error);
+    }
+}
+
+
+module.exports = { sclassCreate, sclassList, deleteSclass, deleteSclasses, getSclassDetail, getSclassStudents, updateSclass };
