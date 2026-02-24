@@ -527,6 +527,35 @@ const familyCreate = async (req, res) => {
     }
 }
 
+const updateFamily = async (req, res) => {
+    try {
+        const result = await Family.findByIdAndUpdate(req.params.id,
+            { $set: req.body },
+            { new: true }
+        );
+        res.send(result);
+    } catch (error) {
+        res.status(500).json(error);
+    }
+}
+
+const deleteFamily = async (req, res) => {
+    try {
+        const family = await Family.findById(req.params.id);
+        if (!family) {
+            return res.send({ message: "Family not found" });
+        }
+        if (family.students && family.students.length > 0) {
+            return res.send({ message: "Cannot delete family because students are still enrolled." });
+        }
+
+        const result = await Family.findByIdAndDelete(req.params.id);
+        res.send(result);
+    } catch (error) {
+        res.status(500).json(error);
+    }
+}
+
 module.exports = {
     studentRegister,
     studentLogIn,
@@ -546,5 +575,7 @@ module.exports = {
     searchFamily,
     getAllFamilies,
     getFamilyDetails,
-    familyCreate
+    familyCreate,
+    updateFamily,
+    deleteFamily
 };
