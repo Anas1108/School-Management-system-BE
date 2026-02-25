@@ -556,6 +556,36 @@ const deleteFamily = async (req, res) => {
     }
 }
 
+const promoteStudents = async (req, res) => {
+    try {
+        const { studentIds, targetClassId, clearRecords, targetSessionYear } = req.body;
+
+        if (!studentIds || !targetClassId) {
+            return res.send({ message: "Student IDs and Target Class ID are required" });
+        }
+
+        const updateData = { sclassName: targetClassId };
+
+        if (targetSessionYear) {
+            updateData.sessionYear = targetSessionYear;
+        }
+
+        if (clearRecords) {
+            updateData.examResult = [];
+            updateData.attendance = [];
+        }
+
+        const result = await Student.updateMany(
+            { _id: { $in: studentIds } },
+            { $set: updateData }
+        );
+
+        res.send({ message: "Students promoted successfully", result });
+    } catch (err) {
+        res.status(500).json(err);
+    }
+}
+
 module.exports = {
     studentRegister,
     studentLogIn,
@@ -577,5 +607,6 @@ module.exports = {
     getFamilyDetails,
     familyCreate,
     updateFamily,
-    deleteFamily
+    deleteFamily,
+    promoteStudents
 };

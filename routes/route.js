@@ -27,7 +27,8 @@ const {
     getFamilyDetails,
     familyCreate,
     updateFamily,
-    deleteFamily
+    deleteFamily,
+    promoteStudents
 } = require('../controllers/student_controller.js');
 const { subjectCreate, classSubjects, deleteSubjectsByClass, getSubjectDetail, deleteSubject, freeSubjectList, allSubjects, deleteSubjects, updateSubject } = require('../controllers/subject-controller.js');
 const { teacherRegister, teacherLogIn, getTeachers, getTeacherDetail, deleteTeachers, deleteTeachersByClass, deleteTeacher, updateTeacherSubject, teacherAttendance, updateTeacher } = require('../controllers/teacher-controller.js');
@@ -61,6 +62,8 @@ router.delete("/StudentsClass/:id", deleteStudentsByClass)
 router.delete("/Student/:id", deleteStudent)
 
 router.put("/Student/:id", updateStudent)
+
+router.put('/Students/Promote', promoteStudents)
 
 router.put('/UpdateExamResult/:id', updateExamResult)
 

@@ -86,7 +86,11 @@ const studentSchema = new mongoose.Schema({
             ref: 'subject',
             required: true
         }
-    }]
+    }],
+    sessionYear: {
+        type: String,
+        default: ""
+    }
 });
 
 module.exports = mongoose.model("student", studentSchema);
