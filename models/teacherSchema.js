@@ -81,18 +81,6 @@ const teacherSchema = new mongoose.Schema({
     serviceBookNumber: {
         type: String,
     },
-    attendance: [{
-        date: {
-            type: Date,
-            required: true
-        },
-        presentCount: {
-            type: String,
-        },
-        absentCount: {
-            type: String,
-        }
-    }]
 }, { timestamps: true });
 
 // Pre-save hook for Employee ID Generation and Password Hashing

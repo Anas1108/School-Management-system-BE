@@ -20,10 +20,6 @@ const subjectAllocationSchema = new mongoose.Schema({
         type: String,
         required: true
     },
-    isClassIncharge: {
-        type: Boolean,
-        default: false
-    },
     type: {
         type: String,
         enum: ['Primary', 'Substitute'],

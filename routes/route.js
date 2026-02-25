@@ -4,9 +4,9 @@ const router = require('express').Router();
 
 const { adminRegister, adminLogIn, getAdminDetail, updateAdmin } = require('../controllers/admin-controller.js');
 
-const { sclassCreate, sclassList, deleteSclass, deleteSclasses, getSclassDetail, getSclassStudents } = require('../controllers/class-controller.js');
+const { sclassCreate, sclassList, deleteSclass, deleteSclasses, getSclassDetail, getSclassStudents, updateSclass, assignClassTeacher, removeClassTeacher, getClassTeachers } = require('../controllers/class-controller.js');
 const { complainCreate, complainList, complainUpdate, complainListByUser, complainDelete } = require('../controllers/complain-controller.js');
-const { noticeCreate, noticeList, deleteNotices, deleteNotice, updateNotice } = require('../controllers/notice-controller.js');
+const { noticeCreate, noticeList, deleteNotices, deleteNotice, updateNotice, getNoticeDetail } = require('../controllers/notice-controller.js');
 const {
     studentRegister,
     studentLogIn,
@@ -15,22 +15,19 @@ const {
     deleteStudents,
     deleteStudent,
     updateStudent,
-    studentAttendance,
     deleteStudentsByClass,
     updateExamResult,
-    clearAllStudentsAttendanceBySubject,
-    clearAllStudentsAttendance,
-    removeStudentAttendanceBySubject,
-    removeStudentAttendance,
     searchFamily,
     getAllFamilies,
     getFamilyDetails,
     familyCreate,
     updateFamily,
-    deleteFamily
+    deleteFamily,
+    promoteStudents
 } = require('../controllers/student_controller.js');
-const { subjectCreate, classSubjects, deleteSubjectsByClass, getSubjectDetail, deleteSubject, freeSubjectList, allSubjects, deleteSubjects } = require('../controllers/subject-controller.js');
-const { teacherRegister, teacherLogIn, getTeachers, getTeacherDetail, deleteTeachers, deleteTeachersByClass, deleteTeacher, updateTeacherSubject, teacherAttendance, updateTeacher } = require('../controllers/teacher-controller.js');
+const { subjectCreate, classSubjects, deleteSubjectsByClass, getSubjectDetail, deleteSubject, freeSubjectList, allSubjects, deleteSubjects, updateSubject } = require('../controllers/subject-controller.js');
+const { teacherRegister, teacherLogIn, getTeachers, getTeacherDetail, deleteTeachers, deleteTeachersByClass, deleteTeacher, updateTeacherSubject, updateTeacher } = require('../controllers/teacher-controller.js');
+const { presetCreate, presetList, deletePreset } = require('../controllers/lastBalancePreset-controller.js');
 
 // Admin
 router.post('/AdminReg', adminRegister);
@@ -62,15 +59,9 @@ router.delete("/Student/:id", deleteStudent)
 
 router.put("/Student/:id", updateStudent)
 
+router.put('/Students/Promote', promoteStudents)
+
 router.put('/UpdateExamResult/:id', updateExamResult)
-
-router.put('/StudentAttendance/:id', studentAttendance)
-
-router.put('/RemoveAllStudentsSubAtten/:id', clearAllStudentsAttendanceBySubject);
-router.put('/RemoveAllStudentsAtten/:id', clearAllStudentsAttendance);
-
-router.put('/RemoveStudentSubAtten/:id', removeStudentAttendanceBySubject);
-router.put('/RemoveStudentAtten/:id', removeStudentAttendance)
 
 // Teacher
 
@@ -88,8 +79,6 @@ router.put("/TeacherSubject", updateTeacherSubject)
 
 router.put("/Teacher/:id", updateTeacher)
 
-router.post('/TeacherAttendance/:id', teacherAttendance)
-
 // Notice
 
 router.post('/NoticeCreate', noticeCreate);
@@ -98,6 +87,8 @@ router.get('/NoticeList/:id', noticeList);
 
 router.delete("/Notices/:id", deleteNotices)
 router.delete("/Notice/:id", deleteNotice)
+
+router.get("/Notice/:id", getNoticeDetail)
 
 router.put("/Notice/:id", updateNotice)
 
@@ -118,8 +109,13 @@ router.post('/SclassCreate', sclassCreate);
 
 router.get('/SclassList/:id', sclassList);
 router.get("/Sclass/:id", getSclassDetail)
+router.put("/Sclass/:id", updateSclass)
 
 router.get("/Sclass/Students/:id", getSclassStudents)
+
+router.put("/SclassTeacher/:id", assignClassTeacher)
+router.put("/RemoveSclassTeacher/:id", removeClassTeacher)
+router.get("/getClassTeachers/:id", getClassTeachers)
 
 router.delete("/Sclasses/:id", deleteSclasses)
 router.delete("/Sclass/:id", deleteSclass)
@@ -132,6 +128,7 @@ router.get('/AllSubjects/:id', allSubjects);
 router.get('/ClassSubjects/:id', classSubjects);
 router.get('/FreeSubjectList/:id', freeSubjectList);
 router.get("/Subject/:id", getSubjectDetail)
+router.put("/Subject/:id", updateSubject)
 
 router.delete("/Subject/:id", deleteSubject)
 router.delete("/Subjects/:id", deleteSubjects)
@@ -145,5 +142,10 @@ router.get('/TeacherWorkload/:id', getTeacherWorkload);
 router.get('/ClassAllocations/:id', getClassAllocations);
 router.delete('/SubjectAllocation/:id', deleteAllocation);
 router.put('/SubjectAllocation/:id', updateAllocation);
+
+// Last Balance Presets
+router.post('/LastBalancePresetCreate', presetCreate);
+router.get('/LastBalancePresets/:id', presetList);
+router.delete('/LastBalancePreset/:id', deletePreset);
 
 module.exports = router;

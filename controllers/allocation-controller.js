@@ -46,6 +46,12 @@ const allocateSubjects = async (req, res) => {
             });
 
             await newAllocation.save();
+
+            // Synchronize with Subject model for backward compatibility and ViewSubject
+            if (req.body.type === 'Primary') {
+                await Subject.findByIdAndUpdate(subjectId, { teacher: teacherId });
+            }
+
             allocationResults.push(newAllocation);
         }
 
@@ -135,6 +141,11 @@ const deleteAllocation = async (req, res) => {
         if (!result) {
             return res.status(404).json({ message: "Allocation not found" });
         }
+
+        if (result.type === 'Primary') {
+            await Subject.findByIdAndUpdate(result.subjectId, { $unset: { teacher: "" } });
+        }
+
         res.json({ message: "Allocation deleted successfully" });
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -160,6 +171,11 @@ const updateAllocation = async (req, res) => {
         allocation.isClassIncharge = isClassIncharge !== undefined ? isClassIncharge : allocation.isClassIncharge;
 
         await allocation.save();
+
+        if (allocation.type === 'Primary') {
+            await Subject.findByIdAndUpdate(allocation.subjectId, { teacher: allocation.teacherId });
+        }
+
         res.json({ message: "Allocation updated successfully", result: allocation });
 
     } catch (error) {

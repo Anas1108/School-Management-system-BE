@@ -100,7 +100,6 @@ const studentLogIn = async (req, res) => {
                 student = await student.populate("sclassName", "sclassName")
                 student.password = undefined;
                 student.examResult = undefined;
-                student.attendance = undefined;
                 res.send(student);
             } else {
                 res.send({ message: "Invalid password" });
@@ -148,6 +147,7 @@ const getStudents = async (req, res) => {
 
             const total = await Student.countDocuments(query);
             const students = await Student.find(query)
+                .select('-examResult')
                 .populate("sclassName", "sclassName")
                 .skip(skip)
                 .limit(limitNum);
@@ -167,7 +167,7 @@ const getStudents = async (req, res) => {
             }
         } else {
             // Backward compatibility: Validation for existing usages (AdminDashboard etc)
-            let students = await Student.find(query).populate("sclassName", "sclassName");
+            let students = await Student.find(query).select('-examResult').populate("sclassName", "sclassName");
             if (students.length > 0) {
                 let modifiedStudents = students.map((student) => {
                     return { ...student._doc, password: undefined };
@@ -188,8 +188,7 @@ const getStudentDetail = async (req, res) => {
             .populate("school", "schoolName")
             .populate("sclassName", "sclassName")
             .populate("familyId") // Populate family details
-            .populate("examResult.subName", "subName")
-            .populate("attendance.subName", "subName sessions");
+            .populate("examResult.subName", "subName");
         if (student) {
             student.password = undefined;
             res.send(student);
@@ -360,106 +359,6 @@ const updateExamResult = async (req, res) => {
     }
 };
 
-const studentAttendance = async (req, res) => {
-    const { subName, status, date } = req.body;
-
-    try {
-        const student = await Student.findById(req.params.id);
-
-        if (!student) {
-            return res.send({ message: 'Student not found' });
-        }
-
-        const subject = await Subject.findById(subName);
-
-        const existingAttendance = student.attendance.find(
-            (a) =>
-                a.date.toDateString() === new Date(date).toDateString() &&
-                a.subName.toString() === subName
-        );
-
-        if (existingAttendance) {
-            existingAttendance.status = status;
-        } else {
-            // Check if the student has already attended the maximum number of sessions
-            const attendedSessions = student.attendance.filter(
-                (a) => a.subName.toString() === subName
-            ).length;
-
-            if (attendedSessions >= subject.sessions) {
-                return res.send({ message: 'Maximum attendance limit reached' });
-            }
-
-            student.attendance.push({ date, status, subName });
-        }
-
-        const result = await student.save();
-        return res.send(result);
-    } catch (error) {
-        res.status(500).json(error);
-    }
-};
-
-const clearAllStudentsAttendanceBySubject = async (req, res) => {
-    const subName = req.params.id;
-
-    try {
-        const result = await Student.updateMany(
-            { 'attendance.subName': subName },
-            { $pull: { attendance: { subName } } }
-        );
-        return res.send(result);
-    } catch (error) {
-        res.status(500).json(error);
-    }
-};
-
-const clearAllStudentsAttendance = async (req, res) => {
-    const schoolId = req.params.id
-
-    try {
-        const result = await Student.updateMany(
-            { school: schoolId },
-            { $set: { attendance: [] } }
-        );
-
-        return res.send(result);
-    } catch (error) {
-        res.status(500).json(error);
-    }
-};
-
-const removeStudentAttendanceBySubject = async (req, res) => {
-    const studentId = req.params.id;
-    const subName = req.body.subId
-
-    try {
-        const result = await Student.updateOne(
-            { _id: studentId },
-            { $pull: { attendance: { subName: subName } } }
-        );
-
-        return res.send(result);
-    } catch (error) {
-        res.status(500).json(error);
-    }
-};
-
-
-const removeStudentAttendance = async (req, res) => {
-    const studentId = req.params.id;
-
-    try {
-        const result = await Student.updateOne(
-            { _id: studentId },
-            { $set: { attendance: [] } }
-        );
-
-        return res.send(result);
-    } catch (error) {
-        res.status(500).json(error);
-    }
-};
 
 
 const getAllFamilies = async (req, res) => {
@@ -556,6 +455,35 @@ const deleteFamily = async (req, res) => {
     }
 }
 
+const promoteStudents = async (req, res) => {
+    try {
+        const { studentIds, targetClassId, clearRecords, targetSessionYear } = req.body;
+
+        if (!studentIds || !targetClassId) {
+            return res.send({ message: "Student IDs and Target Class ID are required" });
+        }
+
+        const updateData = { sclassName: targetClassId };
+
+        if (targetSessionYear) {
+            updateData.sessionYear = targetSessionYear;
+        }
+
+        if (clearRecords) {
+            updateData.examResult = [];
+        }
+
+        const result = await Student.updateMany(
+            { _id: { $in: studentIds } },
+            { $set: updateData }
+        );
+
+        res.send({ message: "Students promoted successfully", result });
+    } catch (err) {
+        res.status(500).json(err);
+    }
+}
+
 module.exports = {
     studentRegister,
     studentLogIn,
@@ -564,18 +492,14 @@ module.exports = {
     deleteStudents,
     deleteStudent,
     updateStudent,
-    studentAttendance,
     deleteStudentsByClass,
     updateExamResult,
 
-    clearAllStudentsAttendanceBySubject,
-    clearAllStudentsAttendance,
-    removeStudentAttendanceBySubject,
-    removeStudentAttendance,
     searchFamily,
     getAllFamilies,
     getFamilyDetails,
     familyCreate,
     updateFamily,
-    deleteFamily
+    deleteFamily,
+    promoteStudents
 };
