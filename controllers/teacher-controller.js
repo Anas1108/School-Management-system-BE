@@ -100,6 +100,7 @@ const getTeachers = async (req, res) => {
 
             const total = await Teacher.countDocuments(query);
             const teachers = await Teacher.find(query)
+                .select('-attendance')
                 .populate("teachSubject", "subName")
                 .populate("teachSclass", "sclassName")
                 .populate("department", "departmentName")
@@ -122,6 +123,7 @@ const getTeachers = async (req, res) => {
         } else {
             // Backward compatibility
             let teachers = await Teacher.find(query)
+                .select('-attendance')
                 .populate("teachSubject", "subName")
                 .populate("teachSclass", "sclassName")
                 .populate("department", "departmentName");

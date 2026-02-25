@@ -148,6 +148,7 @@ const getStudents = async (req, res) => {
 
             const total = await Student.countDocuments(query);
             const students = await Student.find(query)
+                .select('-attendance -examResult')
                 .populate("sclassName", "sclassName")
                 .skip(skip)
                 .limit(limitNum);
@@ -167,7 +168,7 @@ const getStudents = async (req, res) => {
             }
         } else {
             // Backward compatibility: Validation for existing usages (AdminDashboard etc)
-            let students = await Student.find(query).populate("sclassName", "sclassName");
+            let students = await Student.find(query).select('-attendance -examResult').populate("sclassName", "sclassName");
             if (students.length > 0) {
                 let modifiedStudents = students.map((student) => {
                     return { ...student._doc, password: undefined };
