@@ -166,11 +166,7 @@ const deleteSubject = async (req, res) => {
             { $pull: { examResult: { subName: deletedSubject._id } } }
         );
 
-        // Remove the objects containing the deleted subject from students' attendance array
-        await Student.updateMany(
-            {},
-            { $pull: { attendance: { subName: deletedSubject._id } } }
-        );
+
 
         res.send(deletedSubject);
     } catch (error) {
@@ -188,10 +184,10 @@ const deleteSubjects = async (req, res) => {
             { $unset: { teachSubject: "" }, $unset: { teachSubject: null } }
         );
 
-        // Set examResult and attendance to null in all students
+        // Set examResult to null in all students
         await Student.updateMany(
             {},
-            { $set: { examResult: null, attendance: null } }
+            { $set: { examResult: null } }
         );
 
         res.send(deletedSubjects);
@@ -210,10 +206,10 @@ const deleteSubjectsByClass = async (req, res) => {
             { $unset: { teachSubject: "" }, $unset: { teachSubject: null } }
         );
 
-        // Set examResult and attendance to null in all students
+        // Set examResult to null in all students
         await Student.updateMany(
             {},
-            { $set: { examResult: null, attendance: null } }
+            { $set: { examResult: null } }
         );
 
         res.send(deletedSubjects);

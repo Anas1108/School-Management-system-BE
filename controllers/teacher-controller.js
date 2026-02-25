@@ -100,7 +100,6 @@ const getTeachers = async (req, res) => {
 
             const total = await Teacher.countDocuments(query);
             const teachers = await Teacher.find(query)
-                .select('-attendance')
                 .populate("teachSubject", "subName")
                 .populate("teachSclass", "sclassName")
                 .populate("department", "departmentName")
@@ -123,7 +122,6 @@ const getTeachers = async (req, res) => {
         } else {
             // Backward compatibility
             let teachers = await Teacher.find(query)
-                .select('-attendance')
                 .populate("teachSubject", "subName")
                 .populate("teachSclass", "sclassName")
                 .populate("department", "departmentName");
@@ -258,33 +256,7 @@ const updateTeacher = async (req, res) => {
     }
 }
 
-const teacherAttendance = async (req, res) => {
-    const { status, date } = req.body;
 
-    try {
-        const teacher = await Teacher.findById(req.params.id);
-
-        if (!teacher) {
-            return res.send({ message: 'Teacher not found' });
-        }
-
-        const existingAttendance = teacher.attendance.find(
-            (a) =>
-                a.date.toDateString() === new Date(date).toDateString()
-        );
-
-        if (existingAttendance) {
-            existingAttendance.status = status;
-        } else {
-            teacher.attendance.push({ date, status });
-        }
-
-        const result = await teacher.save();
-        return res.send(result);
-    } catch (error) {
-        res.status(500).json(error)
-    }
-};
 
 module.exports = {
     teacherRegister,
@@ -295,6 +267,5 @@ module.exports = {
     deleteTeacher,
     deleteTeachers,
     deleteTeachersByClass,
-    teacherAttendance,
     updateTeacher
 };
