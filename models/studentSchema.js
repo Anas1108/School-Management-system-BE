@@ -27,6 +27,11 @@ const studentSchema = new mongoose.Schema({
         type: String,
         default: "Student"
     },
+    // Dynamically added balances (e.g., Books, Uniform)
+    lastBalances: [{
+        feeName: { type: String, required: true },
+        amount: { type: Number, required: true, default: 0 }
+    }],
     // New Fields for Family/Guardian Module
     dateOfBirth: {
         type: Date,

@@ -27,6 +27,7 @@ const {
 } = require('../controllers/student_controller.js');
 const { subjectCreate, classSubjects, deleteSubjectsByClass, getSubjectDetail, deleteSubject, freeSubjectList, allSubjects, deleteSubjects, updateSubject } = require('../controllers/subject-controller.js');
 const { teacherRegister, teacherLogIn, getTeachers, getTeacherDetail, deleteTeachers, deleteTeachersByClass, deleteTeacher, updateTeacherSubject, updateTeacher } = require('../controllers/teacher-controller.js');
+const { presetCreate, presetList, deletePreset } = require('../controllers/lastBalancePreset-controller.js');
 
 // Admin
 router.post('/AdminReg', adminRegister);
@@ -137,5 +138,10 @@ router.get('/TeacherWorkload/:id', getTeacherWorkload);
 router.get('/ClassAllocations/:id', getClassAllocations);
 router.delete('/SubjectAllocation/:id', deleteAllocation);
 router.put('/SubjectAllocation/:id', updateAllocation);
+
+// Last Balance Presets
+router.post('/LastBalancePresetCreate', presetCreate);
+router.get('/LastBalancePresets/:id', presetList);
+router.delete('/LastBalancePreset/:id', deletePreset);
 
 module.exports = router;
