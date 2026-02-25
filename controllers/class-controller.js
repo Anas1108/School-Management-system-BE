@@ -29,7 +29,7 @@ const sclassCreate = async (req, res) => {
 
 const sclassList = async (req, res) => {
     try {
-        let sclasses = await Sclass.find({ school: req.params.id })
+        let sclasses = await Sclass.find({ school: req.params.id }).populate('classTeacher', 'name');
         if (sclasses.length > 0) {
             res.send(sclasses)
         } else {
@@ -44,7 +44,7 @@ const getSclassDetail = async (req, res) => {
     try {
         let sclass = await Sclass.findById(req.params.id);
         if (sclass) {
-            sclass = await sclass.populate("school", "schoolName")
+            sclass = await sclass.populate([{ path: "school", select: "schoolName" }, { path: "classTeacher" }]);
             res.send(sclass);
         }
         else {
@@ -126,5 +126,78 @@ const updateSclass = async (req, res) => {
     }
 }
 
+const assignClassTeacher = async (req, res) => {
+    try {
+        const { teacherId } = req.body;
+        const currentClassId = req.params.id;
 
-module.exports = { sclassCreate, sclassList, deleteSclass, deleteSclasses, getSclassDetail, getSclassStudents, updateSclass };
+        const currentClass = await Sclass.findById(currentClassId);
+        if (!currentClass) {
+            return res.status(404).json({ message: "Class not found" });
+        }
+
+        // Check if this teacher is already assigned to another class as a class teacher
+        const existingClassWithTeacher = await Sclass.findOne({
+            classTeacher: teacherId,
+            _id: { $ne: currentClassId },
+            school: currentClass.school
+        });
+
+        if (existingClassWithTeacher) {
+            return res.status(400).json({ message: `This teacher is already assigned as a class teacher for class: ${existingClassWithTeacher.sclassName}` });
+        }
+
+        // If there was a previous teacher, clear their teachSclass
+        if (currentClass.classTeacher) {
+            await Teacher.findByIdAndUpdate(currentClass.classTeacher, { $unset: { teachSclass: "" } });
+        }
+
+        // Update the class with new teacher
+        const updatedClass = await Sclass.findByIdAndUpdate(currentClassId, { classTeacher: teacherId }, { new: true }).populate('classTeacher', 'name');
+
+        // Update the teacher's teachSclass field for sync
+        if (teacherId) {
+            await Teacher.findByIdAndUpdate(teacherId, { teachSclass: currentClassId });
+        }
+
+        res.send(updatedClass);
+    } catch (error) {
+        res.status(500).json(error);
+    }
+}
+
+const removeClassTeacher = async (req, res) => {
+    try {
+        const currentClass = await Sclass.findById(req.params.id);
+        if (!currentClass) {
+            return res.status(404).json({ message: "Class not found" });
+        }
+
+        const teacherId = currentClass.classTeacher;
+
+        // Clear teachSclass for the teacher
+        if (teacherId) {
+            await Teacher.findByIdAndUpdate(teacherId, { $unset: { teachSclass: "" } });
+        }
+
+        const updatedClass = await Sclass.findByIdAndUpdate(req.params.id, { $unset: { classTeacher: "" } }, { new: true });
+        res.send(updatedClass);
+    } catch (error) {
+        res.status(500).json(error);
+    }
+}
+
+const getClassTeachers = async (req, res) => {
+    try {
+        let sclasses = await Sclass.find({ school: req.params.id, classTeacher: { $exists: true, $ne: null } }).populate('classTeacher', 'name');
+        if (sclasses.length > 0) {
+            res.send(sclasses)
+        } else {
+            res.send({ message: "No class teachers found" });
+        }
+    } catch (err) {
+        res.status(500).json(err);
+    }
+}
+
+module.exports = { sclassCreate, sclassList, deleteSclass, deleteSclasses, getSclassDetail, getSclassStudents, updateSclass, assignClassTeacher, removeClassTeacher, getClassTeachers };
