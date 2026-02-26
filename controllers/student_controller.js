@@ -5,6 +5,8 @@ const Subject = require('../models/subjectSchema.js');
 const Family = require('../models/familySchema.js');
 const FeeStructure = require('../models/feeStructureSchema.js');
 const StudentInvoice = require('../models/studentInvoiceSchema.js');
+const StudentDiscount = require('../models/studentDiscountSchema.js');
+const Sclass = require('../models/sclassSchema.js');
 
 const searchFamily = async (req, res) => {
     try {
@@ -123,15 +125,22 @@ const getStudents = async (req, res) => {
         // Add search functionality if search term is provided
         if (search) {
             const searchRegex = new RegExp(search, 'i');
+
+            // Find class IDs that match the search term to include students from those classes
+            const matchedClasses = await Sclass.find({ school: schoolId, sclassName: searchRegex }).select('_id');
+            const matchedClassIds = matchedClasses.map(c => c._id);
+
             const isNumeric = !isNaN(search);
             if (isNumeric) {
                 query.$or = [
                     { name: searchRegex },
-                    { rollNum: search }
+                    { rollNum: search },
+                    { sclassName: { $in: matchedClassIds } }
                 ];
             } else {
                 query.$or = [
-                    { name: searchRegex }
+                    { name: searchRegex },
+                    { sclassName: { $in: matchedClassIds } }
                 ];
             }
 
@@ -214,6 +223,8 @@ const deleteStudent = async (req, res) => {
 
             // Clean up any billing invoices associated with this student
             await StudentInvoice.deleteMany({ studentId: result._id });
+            // Clean up any discounts associated with this student
+            await StudentDiscount.deleteMany({ studentId: result._id });
         }
 
         res.send(result)
@@ -239,6 +250,8 @@ const deleteStudents = async (req, res) => {
 
             // Clean up any billing invoices associated with these students
             await StudentInvoice.deleteMany({ studentId: { $in: studentIds } });
+            // Clean up any discounts associated with these students
+            await StudentDiscount.deleteMany({ studentId: { $in: studentIds } });
 
             res.send(result)
         }
@@ -264,6 +277,8 @@ const deleteStudentsByClass = async (req, res) => {
 
             // Clean up any billing invoices associated with these students
             await StudentInvoice.deleteMany({ studentId: { $in: studentIds } });
+            // Clean up any discounts associated with these students
+            await StudentDiscount.deleteMany({ studentId: { $in: studentIds } });
 
             res.send(result)
         }
@@ -332,6 +347,27 @@ const updateStudent = async (req, res) => {
                         };
                     });
 
+                    // Calculate Discounts
+                    const discounts = await StudentDiscount.find({ studentId: req.params.id, status: 'Active' }).populate('discountGroup');
+                    let totalDiscount = 0;
+                    const discountBreakdown = discounts.map(discount => {
+                        let discountName = discount.discountGroup ? discount.discountGroup.name : discount.customName;
+                        let amount = 0;
+                        if (discount.type === 'Percentage') {
+                            amount = (currentFee * discount.value) / 100;
+                        } else if (discount.type === 'FixedAmount') {
+                            amount = discount.value;
+                        }
+                        totalDiscount += amount;
+                        return {
+                            discountName,
+                            amount
+                        };
+                    });
+
+                    let finalAmount = currentFee - totalDiscount;
+                    if (finalAmount < 0) finalAmount = 0;
+
                     const studIdStr = req.params.id.toString();
                     const shortId = studIdStr.substring(studIdStr.length - 4).toUpperCase();
                     const randomPart = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -350,10 +386,11 @@ const updateStudent = async (req, res) => {
                         year,
                         challanNumber,
                         feeBreakdown: detailedBreakdown,
+                        discountBreakdown: discountBreakdown,
                         previousArrears,
-                        totalAmount: currentFee > 0 ? currentFee : 0,
+                        totalAmount: finalAmount > 0 ? finalAmount : 0,
                         dueDate,
-                        status: currentFee <= 0 ? 'Paid' : 'Unpaid'
+                        status: finalAmount <= 0 ? 'Paid' : 'Unpaid'
                     });
 
                     await newInvoice.save();

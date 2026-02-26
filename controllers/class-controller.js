@@ -2,6 +2,11 @@ const Sclass = require('../models/sclassSchema.js');
 const Student = require('../models/studentSchema.js');
 const Subject = require('../models/subjectSchema.js');
 const Teacher = require('../models/teacherSchema.js');
+const SubjectAllocation = require('../models/allocationSchema.js');
+const FeeStructure = require('../models/feeStructureSchema.js');
+const Family = require('../models/familySchema.js');
+const StudentInvoice = require('../models/studentInvoiceSchema.js');
+const StudentDiscount = require('../models/studentDiscountSchema.js');
 
 const sclassCreate = async (req, res) => {
     try {
@@ -105,6 +110,7 @@ const deleteSclass = async (req, res) => {
                 { $pull: { students: { $in: studentIds } } }
             );
             await StudentInvoice.deleteMany({ studentId: { $in: studentIds } });
+            await StudentDiscount.deleteMany({ studentId: { $in: studentIds } });
         }
 
         res.send(deletedClass);
