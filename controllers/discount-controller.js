@@ -75,6 +75,16 @@ const assignStudentDiscount = async (req, res) => {
             return res.status(400).json({ message: "Discount must have a name (either preset or custom)" });
         }
 
+        const activeDiscounts = await StudentDiscount.find({ studentId, status: 'Active' }).populate('discountGroup');
+        const isDuplicate = activeDiscounts.some(d => {
+            const dName = d.discountGroup ? d.discountGroup.name : d.customName;
+            return dName && dName.toLowerCase() === nameToUse.toLowerCase();
+        });
+
+        if (isDuplicate) {
+            return res.status(400).json({ message: "This discount is already assigned to the student" });
+        }
+
         const studentDiscount = new StudentDiscount({
             studentId,
             school: adminID,
