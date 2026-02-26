@@ -128,7 +128,7 @@ const generateInvoices = async (req, res) => {
     const { classId, month, year, adminID } = req.body;
 
     try {
-        const students = await Student.find({ sclassName: classId, school: adminID });
+        const students = await Student.find({ sclassName: classId, school: adminID, status: { $ne: 'Retired' } });
         const feeStructure = await FeeStructure.findOne({ classId: classId }).populate('feeHeads.headId');
 
 

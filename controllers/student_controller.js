@@ -122,6 +122,12 @@ const getStudents = async (req, res) => {
         // Base query
         let query = { school: schoolId };
 
+        if (req.query.status === 'Retired') {
+            query.status = 'Retired';
+        } else {
+            query.status = { $ne: 'Retired' };
+        }
+
         // Add search functionality if search term is provided
         if (search) {
             const searchRegex = new RegExp(search, 'i');
@@ -308,8 +314,8 @@ const updateStudent = async (req, res) => {
             { $set: req.body },
             { new: true })
 
-        // Check if class changed
-        if (req.body.sclassName && oldStudent.sclassName.toString() !== req.body.sclassName.toString()) {
+        // Check if class changed and student is not retired
+        if (req.body.sclassName && oldStudent.sclassName.toString() !== req.body.sclassName.toString() && oldStudent.status !== 'Retired') {
             const currentDate = new Date();
             const month = currentDate.getMonth() + 1;
             const year = currentDate.getFullYear();
@@ -557,6 +563,25 @@ const promoteStudents = async (req, res) => {
     }
 }
 
+const retireStudents = async (req, res) => {
+    try {
+        const { studentIds } = req.body;
+
+        if (!studentIds || !studentIds.length) {
+            return res.send({ message: "Student IDs are required" });
+        }
+
+        const result = await Student.updateMany(
+            { _id: { $in: studentIds } },
+            { $set: { status: 'Retired', retirementDate: new Date() } }
+        );
+
+        res.send({ message: "Students retired successfully", result });
+    } catch (err) {
+        res.status(500).json(err);
+    }
+}
+
 module.exports = {
     studentRegister,
     studentLogIn,
@@ -574,5 +599,6 @@ module.exports = {
     familyCreate,
     updateFamily,
     deleteFamily,
-    promoteStudents
+    promoteStudents,
+    retireStudents
 };
