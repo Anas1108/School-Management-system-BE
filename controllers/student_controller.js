@@ -204,35 +204,71 @@ const getStudentDetail = async (req, res) => {
 const deleteStudent = async (req, res) => {
     try {
         const result = await Student.findByIdAndDelete(req.params.id)
+
+        if (result) {
+            // Remove the student ID from their Family's students array
+            await Family.updateOne(
+                { students: result._id },
+                { $pull: { students: result._id } }
+            );
+
+            // Clean up any billing invoices associated with this student
+            await StudentInvoice.deleteMany({ studentId: result._id });
+        }
+
         res.send(result)
     } catch (error) {
-        res.status(500).json(err);
+        res.status(500).json(error);
     }
 }
 
 const deleteStudents = async (req, res) => {
     try {
+        const deletedStudents = await Student.find({ school: req.params.id });
+        const studentIds = deletedStudents.map(student => student._id);
+
         const result = await Student.deleteMany({ school: req.params.id })
         if (result.deletedCount === 0) {
             res.send({ message: "No students found to delete" })
         } else {
+            // Remove all these student IDs from their Family's students array
+            await Family.updateMany(
+                { students: { $in: studentIds } },
+                { $pull: { students: { $in: studentIds } } }
+            );
+
+            // Clean up any billing invoices associated with these students
+            await StudentInvoice.deleteMany({ studentId: { $in: studentIds } });
+
             res.send(result)
         }
     } catch (error) {
-        res.status(500).json(err);
+        res.status(500).json(error);
     }
 }
 
 const deleteStudentsByClass = async (req, res) => {
     try {
+        const deletedStudents = await Student.find({ sclassName: req.params.id });
+        const studentIds = deletedStudents.map(student => student._id);
+
         const result = await Student.deleteMany({ sclassName: req.params.id })
         if (result.deletedCount === 0) {
             res.send({ message: "No students found to delete" })
         } else {
+            // Remove all these student IDs from their Family's students array
+            await Family.updateMany(
+                { students: { $in: studentIds } },
+                { $pull: { students: { $in: studentIds } } }
+            );
+
+            // Clean up any billing invoices associated with these students
+            await StudentInvoice.deleteMany({ studentId: { $in: studentIds } });
+
             res.send(result)
         }
     } catch (error) {
-        res.status(500).json(err);
+        res.status(500).json(error);
     }
 }
 

@@ -154,6 +154,10 @@ const deleteSubject = async (req, res) => {
     try {
         const deletedSubject = await Subject.findByIdAndDelete(req.params.id);
 
+        if (!deletedSubject) {
+            return res.send({ message: "Subject not found" });
+        }
+
         // Set the teachSubject field to null in teachers
         await Teacher.updateOne(
             { teachSubject: deletedSubject._id },
@@ -162,11 +166,12 @@ const deleteSubject = async (req, res) => {
 
         // Remove the objects containing the deleted subject from students' examResult array
         await Student.updateMany(
-            {},
+            { 'examResult.subName': deletedSubject._id },
             { $pull: { examResult: { subName: deletedSubject._id } } }
         );
 
-
+        // Clean up orphaned SubjectAllocation records
+        await SubjectAllocation.deleteMany({ subjectId: deletedSubject._id });
 
         res.send(deletedSubject);
     } catch (error) {
@@ -176,21 +181,27 @@ const deleteSubject = async (req, res) => {
 
 const deleteSubjects = async (req, res) => {
     try {
-        const deletedSubjects = await Subject.deleteMany({ school: req.params.id });
+        const deletedSubjects = await Subject.find({ school: req.params.id });
+        const subjectIds = deletedSubjects.map(subject => subject._id);
+
+        const deletionResult = await Subject.deleteMany({ school: req.params.id });
 
         // Set the teachSubject field to null in teachers
         await Teacher.updateMany(
-            { teachSubject: { $in: deletedSubjects.map(subject => subject._id) } },
+            { teachSubject: { $in: subjectIds } },
             { $unset: { teachSubject: "" }, $unset: { teachSubject: null } }
         );
 
-        // Set examResult to null in all students
+        // Properly pull the deleted subjects from exam result arrays, instead of wiping the whole array
         await Student.updateMany(
-            {},
-            { $set: { examResult: null } }
+            { 'examResult.subName': { $in: subjectIds } },
+            { $pull: { examResult: { subName: { $in: subjectIds } } } }
         );
 
-        res.send(deletedSubjects);
+        // Clean up orphaned SubjectAllocation records
+        await SubjectAllocation.deleteMany({ subjectId: { $in: subjectIds } });
+
+        res.send(deletionResult);
     } catch (error) {
         res.status(500).json(error);
     }
@@ -198,21 +209,27 @@ const deleteSubjects = async (req, res) => {
 
 const deleteSubjectsByClass = async (req, res) => {
     try {
-        const deletedSubjects = await Subject.deleteMany({ sclassName: req.params.id });
+        const deletedSubjects = await Subject.find({ sclassName: req.params.id });
+        const subjectIds = deletedSubjects.map(subject => subject._id);
+
+        const deletionResult = await Subject.deleteMany({ sclassName: req.params.id });
 
         // Set the teachSubject field to null in teachers
         await Teacher.updateMany(
-            { teachSubject: { $in: deletedSubjects.map(subject => subject._id) } },
+            { teachSubject: { $in: subjectIds } },
             { $unset: { teachSubject: "" }, $unset: { teachSubject: null } }
         );
 
-        // Set examResult to null in all students
+        // Properly pull the deleted subjects from exam result arrays, instead of wiping the whole array
         await Student.updateMany(
-            {},
-            { $set: { examResult: null } }
+            { 'examResult.subName': { $in: subjectIds } },
+            { $pull: { examResult: { subName: { $in: subjectIds } } } }
         );
 
-        res.send(deletedSubjects);
+        // Clean up orphaned SubjectAllocation records
+        await SubjectAllocation.deleteMany({ subjectId: { $in: subjectIds } });
+
+        res.send(deletionResult);
     } catch (error) {
         res.status(500).json(error);
     }
