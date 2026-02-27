@@ -62,6 +62,14 @@ const assignStudentDiscount = async (req, res) => {
         let typeToUse = type;
         let valueToUse = value;
 
+        const student = await Student.findById(studentId);
+        if (!student) {
+            return res.status(404).json({ message: "Student not found" });
+        }
+        if (student.status === 'Retired') {
+            return res.status(400).json({ message: "Cannot assign discounts to a retired student" });
+        }
+
         if (discountGroup) {
             const group = await DiscountGroup.findById(discountGroup);
             if (group) {
