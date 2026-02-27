@@ -124,6 +124,19 @@ const getFeeStructure = async (req, res) => {
 };
 
 // specialized logic 
+const deleteFeeStructure = async (req, res) => {
+    try {
+        const result = await FeeStructure.findOneAndDelete({ classId: req.params.id });
+        if (result) {
+            res.send({ message: "Fee structure deleted successfully", result });
+        } else {
+            res.status(404).json({ message: "Fee structure not found" });
+        }
+    } catch (err) {
+        res.status(500).json(err);
+    }
+};
+
 const generateInvoices = async (req, res) => {
     const { classId, month, year, adminID } = req.body;
 
@@ -527,6 +540,7 @@ module.exports = {
     deleteFeeHead,
     createFeeStructure,
     getFeeStructure,
+    deleteFeeStructure,
     generateInvoices,
     getInvoices,
     payInvoice,

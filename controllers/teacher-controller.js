@@ -163,13 +163,21 @@ const getTeacherDetail = async (req, res) => {
 const updateTeacherSubject = async (req, res) => {
     const { teacherId, teachSubject } = req.body;
     try {
+        const currentTeacher = await Teacher.findById(teacherId);
+        if (currentTeacher && currentTeacher.teachSubject) {
+            // Remove teacher from old subject
+            await Subject.findByIdAndUpdate(currentTeacher.teachSubject, { $unset: { teacher: "" } });
+        }
+
         const updatedTeacher = await Teacher.findByIdAndUpdate(
             teacherId,
             { teachSubject },
             { new: true }
         );
 
-        await Subject.findByIdAndUpdate(teachSubject, { teacher: updatedTeacher._id });
+        if (teachSubject) {
+            await Subject.findByIdAndUpdate(teachSubject, { teacher: updatedTeacher._id });
+        }
 
         res.send(updatedTeacher);
     } catch (error) {

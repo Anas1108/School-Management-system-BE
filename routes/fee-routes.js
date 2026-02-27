@@ -22,6 +22,7 @@ router.delete('/FeeHeadDelete/:id', require('../controllers/fee-controller').del
 // Fee Structure
 router.post('/FeeStructureCreate', createFeeStructure);
 router.get('/FeeStructure/:id', getFeeStructure); // :id = classId
+router.delete('/FeeStructureDelete/:id', require('../controllers/fee-controller').deleteFeeStructure); // :id = classId
 
 // Invoices
 router.post('/FeeInvoiceGenerate', generateInvoices);

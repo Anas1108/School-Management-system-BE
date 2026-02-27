@@ -13,15 +13,16 @@ const regenerateCurrentMonthInvoice = async (studentId, newClassId, schoolId) =>
     const month = currentDate.getMonth() + 1;
     const year = currentDate.getFullYear();
 
-    // Find current month's unpaid invoice
+    // Find current month's unpaid or partial invoice
     const existingInvoice = await StudentInvoice.findOne({
         studentId: studentId,
         month,
         year,
-        status: 'Unpaid'
+        status: { $ne: 'Paid' }
     });
 
     if (existingInvoice) {
+        let previousPaidAmount = existingInvoice.paidAmount || 0;
         await StudentInvoice.findByIdAndDelete(existingInvoice._id);
 
         // Generate new invoice for new class
@@ -77,6 +78,14 @@ const regenerateCurrentMonthInvoice = async (studentId, newClassId, schoolId) =>
             const actualDueDay = Math.min(dueDay, daysInMonth);
             const dueDate = new Date(year, month - 1, actualDueDay);
 
+            let totalDue = finalAmount > 0 ? finalAmount : 0;
+            let newStatus = 'Unpaid';
+            if (previousPaidAmount >= (totalDue + previousArrears)) {
+                newStatus = 'Paid';
+            } else if (previousPaidAmount > 0) {
+                newStatus = 'Partial';
+            }
+
             const newInvoice = new StudentInvoice({
                 studentId: studentId,
                 school: schoolId,
@@ -87,9 +96,10 @@ const regenerateCurrentMonthInvoice = async (studentId, newClassId, schoolId) =>
                 feeBreakdown: detailedBreakdown,
                 discountBreakdown: discountBreakdown,
                 previousArrears,
-                totalAmount: finalAmount > 0 ? finalAmount : 0,
+                totalAmount: totalDue,
                 dueDate,
-                status: finalAmount <= 0 ? 'Paid' : 'Unpaid'
+                paidAmount: previousPaidAmount,
+                status: newStatus
             });
 
             await newInvoice.save();
