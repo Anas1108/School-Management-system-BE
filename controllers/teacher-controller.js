@@ -181,7 +181,7 @@ const deleteTeacher = async (req, res) => {
     try {
         const deletedTeacher = await Teacher.findByIdAndDelete(req.params.id);
 
-        await Subject.updateOne(
+        await Subject.updateMany(
             { teacher: deletedTeacher._id, teacher: { $exists: true } },
             { $unset: { teacher: 1 } }
         );

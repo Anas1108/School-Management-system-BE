@@ -152,6 +152,7 @@ const deleteSclasses = async (req, res) => {
                 { $pull: { students: { $in: studentIds } } }
             );
             await StudentInvoice.deleteMany({ studentId: { $in: studentIds } });
+            await StudentDiscount.deleteMany({ studentId: { $in: studentIds } });
         }
 
         res.send(deletionResult);

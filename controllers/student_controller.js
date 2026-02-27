@@ -8,6 +8,95 @@ const StudentInvoice = require('../models/studentInvoiceSchema.js');
 const StudentDiscount = require('../models/studentDiscountSchema.js');
 const Sclass = require('../models/sclassSchema.js');
 
+const regenerateCurrentMonthInvoice = async (studentId, newClassId, schoolId) => {
+    const currentDate = new Date();
+    const month = currentDate.getMonth() + 1;
+    const year = currentDate.getFullYear();
+
+    // Find current month's unpaid invoice
+    const existingInvoice = await StudentInvoice.findOne({
+        studentId: studentId,
+        month,
+        year,
+        status: 'Unpaid'
+    });
+
+    if (existingInvoice) {
+        await StudentInvoice.findByIdAndDelete(existingInvoice._id);
+
+        // Generate new invoice for new class
+        const feeStructure = await FeeStructure.findOne({ classId: newClassId }).populate('feeHeads.headId');
+
+        if (feeStructure) {
+            // Calculate previous arrears
+            const previousInvoices = await StudentInvoice.find({ studentId: studentId });
+            let balance = 0;
+            previousInvoices.forEach(inv => {
+                balance += (inv.totalAmount + inv.lateFine) - inv.paidAmount;
+            });
+
+            let previousArrears = balance > 0 ? balance : 0;
+
+            let currentFee = 0;
+            const detailedBreakdown = feeStructure.feeHeads.map(head => {
+                currentFee += head.amount;
+                return {
+                    headName: head.headId.name,
+                    amount: head.amount
+                };
+            });
+
+            // Calculate Discounts
+            const discounts = await StudentDiscount.find({ studentId, status: 'Active' }).populate('discountGroup');
+            let totalDiscount = 0;
+            const discountBreakdown = discounts.map(discount => {
+                let discountName = discount.discountGroup ? discount.discountGroup.name : discount.customName;
+                let amount = 0;
+                if (discount.type === 'Percentage') {
+                    amount = (currentFee * discount.value) / 100;
+                } else if (discount.type === 'FixedAmount') {
+                    amount = discount.value;
+                }
+                totalDiscount += amount;
+                return {
+                    discountName,
+                    amount
+                };
+            });
+
+            let finalAmount = currentFee - totalDiscount;
+            if (finalAmount < 0) finalAmount = 0;
+
+            const studIdStr = studentId.toString();
+            const shortId = studIdStr.substring(studIdStr.length - 4).toUpperCase();
+            const randomPart = Math.random().toString(36).substring(2, 6).toUpperCase();
+            const challanNumber = `SCH-${year}-${month}-${shortId}-${randomPart}`;
+
+            const dueDay = feeStructure.dueDay || 10;
+            const daysInMonth = new Date(year, month, 0).getDate();
+            const actualDueDay = Math.min(dueDay, daysInMonth);
+            const dueDate = new Date(year, month - 1, actualDueDay);
+
+            const newInvoice = new StudentInvoice({
+                studentId: studentId,
+                school: schoolId,
+                classId: newClassId,
+                month,
+                year,
+                challanNumber,
+                feeBreakdown: detailedBreakdown,
+                discountBreakdown: discountBreakdown,
+                previousArrears,
+                totalAmount: finalAmount > 0 ? finalAmount : 0,
+                dueDate,
+                status: finalAmount <= 0 ? 'Paid' : 'Unpaid'
+            });
+
+            await newInvoice.save();
+        }
+    }
+};
+
 const searchFamily = async (req, res) => {
     try {
         const { familyName } = req.body;
@@ -316,92 +405,7 @@ const updateStudent = async (req, res) => {
 
         // Check if class changed and student is not retired
         if (req.body.sclassName && oldStudent.sclassName.toString() !== req.body.sclassName.toString() && oldStudent.status !== 'Retired') {
-            const currentDate = new Date();
-            const month = currentDate.getMonth() + 1;
-            const year = currentDate.getFullYear();
-
-            // Find current month's unpaid invoice
-            const existingInvoice = await StudentInvoice.findOne({
-                studentId: req.params.id,
-                month,
-                year,
-                status: 'Unpaid'
-            });
-
-            if (existingInvoice) {
-                await StudentInvoice.findByIdAndDelete(existingInvoice._id);
-
-                // Generate new invoice for new class
-                const feeStructure = await FeeStructure.findOne({ classId: req.body.sclassName }).populate('feeHeads.headId');
-
-                if (feeStructure) {
-                    // Calculate previous arrears
-                    const previousInvoices = await StudentInvoice.find({ studentId: req.params.id });
-                    let balance = 0;
-                    previousInvoices.forEach(inv => {
-                        balance += (inv.totalAmount + inv.lateFine) - inv.paidAmount;
-                    });
-
-                    let previousArrears = balance > 0 ? balance : 0;
-
-                    let currentFee = 0;
-                    const detailedBreakdown = feeStructure.feeHeads.map(head => {
-                        currentFee += head.amount;
-                        return {
-                            headName: head.headId.name,
-                            amount: head.amount
-                        };
-                    });
-
-                    // Calculate Discounts
-                    const discounts = await StudentDiscount.find({ studentId: req.params.id, status: 'Active' }).populate('discountGroup');
-                    let totalDiscount = 0;
-                    const discountBreakdown = discounts.map(discount => {
-                        let discountName = discount.discountGroup ? discount.discountGroup.name : discount.customName;
-                        let amount = 0;
-                        if (discount.type === 'Percentage') {
-                            amount = (currentFee * discount.value) / 100;
-                        } else if (discount.type === 'FixedAmount') {
-                            amount = discount.value;
-                        }
-                        totalDiscount += amount;
-                        return {
-                            discountName,
-                            amount
-                        };
-                    });
-
-                    let finalAmount = currentFee - totalDiscount;
-                    if (finalAmount < 0) finalAmount = 0;
-
-                    const studIdStr = req.params.id.toString();
-                    const shortId = studIdStr.substring(studIdStr.length - 4).toUpperCase();
-                    const randomPart = Math.random().toString(36).substring(2, 6).toUpperCase();
-                    const challanNumber = `SCH-${year}-${month}-${shortId}-${randomPart}`;
-
-                    const dueDay = feeStructure.dueDay || 10;
-                    const daysInMonth = new Date(year, month, 0).getDate();
-                    const actualDueDay = Math.min(dueDay, daysInMonth);
-                    const dueDate = new Date(year, month - 1, actualDueDay);
-
-                    const newInvoice = new StudentInvoice({
-                        studentId: req.params.id,
-                        school: result.school,
-                        classId: req.body.sclassName,
-                        month,
-                        year,
-                        challanNumber,
-                        feeBreakdown: detailedBreakdown,
-                        discountBreakdown: discountBreakdown,
-                        previousArrears,
-                        totalAmount: finalAmount > 0 ? finalAmount : 0,
-                        dueDate,
-                        status: finalAmount <= 0 ? 'Paid' : 'Unpaid'
-                    });
-
-                    await newInvoice.save();
-                }
-            }
+            await regenerateCurrentMonthInvoice(req.params.id, req.body.sclassName, result.school);
         }
 
         result.password = undefined;
@@ -556,6 +560,14 @@ const promoteStudents = async (req, res) => {
             { _id: { $in: studentIds } },
             { $set: updateData }
         );
+
+        // Regenerate invoices for the new class if they have an unpaid invoice for the current month
+        for (const studentId of studentIds) {
+            const student = await Student.findById(studentId);
+            if (student && student.status !== 'Retired') {
+                await regenerateCurrentMonthInvoice(studentId, targetClassId, student.school);
+            }
+        }
 
         res.send({ message: "Students promoted successfully", result });
     } catch (err) {
