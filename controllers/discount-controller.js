@@ -6,8 +6,9 @@ const Student = require('../models/studentSchema');
 // Admin manages Discount Groups (Templates)
 const createDiscountGroup = async (req, res) => {
     try {
+        const escapedName = req.body.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const existingGroup = await DiscountGroup.findOne({
-            name: { $regex: new RegExp(`^${req.body.name}$`, 'i') },
+            name: { $regex: new RegExp(`^${escapedName}$`, 'i') },
             school: req.body.adminID
         });
 
@@ -47,6 +48,9 @@ const updateDiscountGroup = async (req, res) => {
 const deleteDiscountGroup = async (req, res) => {
     try {
         const result = await DiscountGroup.findByIdAndDelete(req.params.id);
+        if (result) {
+            await StudentDiscount.deleteMany({ discountGroup: result._id });
+        }
         res.send(result);
     } catch (err) {
         res.status(500).json(err);

@@ -7,7 +7,8 @@ const presetCreate = async (req, res) => {
             return res.send({ message: "Preset name and admin ID are required" });
         }
 
-        const existingPreset = await LastBalancePreset.findOne({ name: { $regex: new RegExp(`^${name}$`, 'i') }, school: adminID });
+        const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const existingPreset = await LastBalancePreset.findOne({ name: { $regex: new RegExp(`^${escapedName}$`, 'i') }, school: adminID });
         if (existingPreset) {
             return res.send({ message: "A preset with this name already exists" });
         }

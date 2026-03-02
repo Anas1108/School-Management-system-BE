@@ -40,8 +40,9 @@ const updateLateFines = async (query) => {
 // Fee Head Management
 const createFeeHead = async (req, res) => {
     try {
+        const escapedName = req.body.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const existingHead = await FeeHead.findOne({
-            name: { $regex: new RegExp(`^${req.body.name}$`, 'i') },
+            name: { $regex: new RegExp(`^${escapedName}$`, 'i') },
             school: req.body.adminID
         });
 
@@ -265,8 +266,8 @@ const getInvoices = async (req, res) => {
         const { month, year } = req.query;
         let query = { classId: req.params.id };
         if (month && year) {
-            query.month = month;
-            query.year = year;
+            query.month = parseInt(month);
+            query.year = parseInt(year);
         }
 
         await updateLateFines(query);
@@ -355,7 +356,7 @@ const getFeeStats = async (req, res) => {
 
         let match = { school: new mongoose.Types.ObjectId(schoolId) };
         if (month && year) {
-            match.month = month;
+            match.month = parseInt(month);
             match.year = parseInt(year);
         }
 

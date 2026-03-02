@@ -189,8 +189,12 @@ const deleteTeacher = async (req, res) => {
     try {
         const deletedTeacher = await Teacher.findByIdAndDelete(req.params.id);
 
+        if (!deletedTeacher) {
+            return res.status(404).json({ message: "Teacher not found" });
+        }
+
         await Subject.updateMany(
-            { teacher: deletedTeacher._id, teacher: { $exists: true } },
+            { teacher: deletedTeacher._id },
             { $unset: { teacher: 1 } }
         );
 
@@ -224,8 +228,8 @@ const deleteTeachers = async (req, res) => {
         const teacherIds = deletedTeachers.map(teacher => teacher._id);
 
         await Subject.updateMany(
-            { teacher: { $in: teacherIds }, teacher: { $exists: true } },
-            { $unset: { teacher: "" }, $unset: { teacher: null } }
+            { teacher: { $in: teacherIds } },
+            { $unset: { teacher: "" } }
         );
 
         // Remove from Sclass.classTeacher
@@ -258,8 +262,8 @@ const deleteTeachersByClass = async (req, res) => {
         const teacherIds = deletedTeachers.map(teacher => teacher._id);
 
         await Subject.updateMany(
-            { teacher: { $in: teacherIds }, teacher: { $exists: true } },
-            { $unset: { teacher: "" }, $unset: { teacher: null } }
+            { teacher: { $in: teacherIds } },
+            { $unset: { teacher: "" } }
         );
 
         // Remove from Sclass.classTeacher
@@ -279,15 +283,16 @@ const deleteTeachersByClass = async (req, res) => {
 
 const updateTeacher = async (req, res) => {
     try {
-        if (req.body.password) {
-            const salt = await bcrypt.genSalt(10)
-            req.body.password = await bcrypt.hash(req.body.password, salt)
+        let teacher = await Teacher.findById(req.params.id);
+        if (!teacher) {
+            return res.status(404).json({ message: "Teacher not found" });
         }
-        let result = await Teacher.findByIdAndUpdate(req.params.id,
-            { $set: req.body },
-            { new: true })
+
+        Object.assign(teacher, req.body);
+        let result = await teacher.save();
+
         result.password = undefined;
-        res.send(result)
+        res.send(result);
     } catch (error) {
         res.status(500).json(error);
     }

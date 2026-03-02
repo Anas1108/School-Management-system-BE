@@ -168,7 +168,7 @@ const studentRegister = async (req, res) => {
         });
 
         if (existingStudent) {
-            res.send({ message: 'Roll Number already exists' });
+            return res.send({ message: 'Roll Number already exists' });
         }
         else {
             const student = new Student({
@@ -409,8 +409,13 @@ const updateStudent = async (req, res) => {
 
         const oldStudent = await Student.findById(req.params.id);
 
+        const updateData = { ...req.body };
+        delete updateData.familyDetails;
+        delete updateData.familyId;
+        delete updateData.adminID;
+
         let result = await Student.findByIdAndUpdate(req.params.id,
-            { $set: req.body },
+            { $set: updateData },
             { new: true })
 
         // Check if class changed and student is not retired

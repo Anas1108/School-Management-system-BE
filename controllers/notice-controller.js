@@ -42,7 +42,7 @@ const deleteNotice = async (req, res) => {
         const result = await Notice.findByIdAndDelete(req.params.id)
         res.send(result)
     } catch (error) {
-        res.status(500).json(err);
+        res.status(500).json(error);
     }
 }
 
@@ -55,7 +55,7 @@ const deleteNotices = async (req, res) => {
             res.send(result)
         }
     } catch (error) {
-        res.status(500).json(err);
+        res.status(500).json(error);
     }
 }
 

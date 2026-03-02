@@ -60,8 +60,8 @@ router.delete("/Student/:id", deleteStudent)
 
 router.put("/Student/:id", updateStudent)
 
-router.put('/Students/Promote', promoteStudents)
-router.put('/Students/Retire', retireStudents)
+router.put('/PromoteStudents', promoteStudents)
+router.put('/RetireStudents', retireStudents)
 
 router.put('/UpdateExamResult/:id', updateExamResult)
 

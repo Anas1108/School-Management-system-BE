@@ -12,7 +12,7 @@ const subjectCreate = async (req, res) => {
         }));
 
         const existingSubjectBySubCode = await Subject.findOne({
-            'subjects.subCode': subjects[0].subCode,
+            subCode: subjects[0].subCode,
             school: req.body.adminID,
         });
 
@@ -161,7 +161,7 @@ const deleteSubject = async (req, res) => {
         // Set the teachSubject field to null in teachers
         await Teacher.updateOne(
             { teachSubject: deletedSubject._id },
-            { $unset: { teachSubject: "" }, $unset: { teachSubject: null } }
+            { $unset: { teachSubject: "" } }
         );
 
         // Remove the objects containing the deleted subject from students' examResult array
@@ -189,7 +189,7 @@ const deleteSubjects = async (req, res) => {
         // Set the teachSubject field to null in teachers
         await Teacher.updateMany(
             { teachSubject: { $in: subjectIds } },
-            { $unset: { teachSubject: "" }, $unset: { teachSubject: null } }
+            { $unset: { teachSubject: "" } }
         );
 
         // Properly pull the deleted subjects from exam result arrays, instead of wiping the whole array
@@ -217,7 +217,7 @@ const deleteSubjectsByClass = async (req, res) => {
         // Set the teachSubject field to null in teachers
         await Teacher.updateMany(
             { teachSubject: { $in: subjectIds } },
-            { $unset: { teachSubject: "" }, $unset: { teachSubject: null } }
+            { $unset: { teachSubject: "" } }
         );
 
         // Properly pull the deleted subjects from exam result arrays, instead of wiping the whole array
