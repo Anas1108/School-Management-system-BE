@@ -120,8 +120,8 @@ const getClassAllocations = async (req, res) => {
                 subjectId: sub._id,
                 isAllocated: !!alloc,
                 allocationId: alloc ? alloc._id : null,
-                teacherName: alloc ? alloc.teacherId.name : "Unassigned",
-                teacherId: alloc ? alloc.teacherId._id : null,
+                teacherName: alloc && alloc.teacherId ? alloc.teacherId.name : "Unassigned",
+                teacherId: alloc && alloc.teacherId ? alloc.teacherId._id : null,
                 type: alloc ? alloc.type : null,
                 isClassIncharge: alloc ? alloc.isClassIncharge : false
             };

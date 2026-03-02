@@ -5,6 +5,107 @@ const Subject = require('../models/subjectSchema.js');
 const Family = require('../models/familySchema.js');
 const FeeStructure = require('../models/feeStructureSchema.js');
 const StudentInvoice = require('../models/studentInvoiceSchema.js');
+const StudentDiscount = require('../models/studentDiscountSchema.js');
+const Sclass = require('../models/sclassSchema.js');
+
+const regenerateCurrentMonthInvoice = async (studentId, newClassId, schoolId) => {
+    const currentDate = new Date();
+    const month = currentDate.getMonth() + 1;
+    const year = currentDate.getFullYear();
+
+    // Find current month's unpaid or partial invoice
+    const existingInvoice = await StudentInvoice.findOne({
+        studentId: studentId,
+        month,
+        year,
+        status: { $ne: 'Paid' }
+    });
+
+    if (existingInvoice) {
+        let previousPaidAmount = existingInvoice.paidAmount || 0;
+        await StudentInvoice.findByIdAndDelete(existingInvoice._id);
+
+        // Generate new invoice for new class
+        const feeStructure = await FeeStructure.findOne({ classId: newClassId }).populate('feeHeads.headId');
+
+        if (feeStructure) {
+            // Calculate previous arrears
+            const previousInvoices = await StudentInvoice.find({ studentId: studentId });
+            let balance = 0;
+            previousInvoices.forEach(inv => {
+                balance += (inv.totalAmount + inv.lateFine) - inv.paidAmount;
+            });
+
+            let previousArrears = balance > 0 ? balance : 0;
+
+            let currentFee = 0;
+            const detailedBreakdown = feeStructure.feeHeads.map(head => {
+                currentFee += head.amount;
+                return {
+                    headName: head.headId.name,
+                    amount: head.amount
+                };
+            });
+
+            // Calculate Discounts
+            const discounts = await StudentDiscount.find({ studentId, status: 'Active' }).populate('discountGroup');
+            let totalDiscount = 0;
+            const discountBreakdown = discounts.map(discount => {
+                let discountName = discount.discountGroup ? discount.discountGroup.name : discount.customName;
+                let amount = 0;
+                if (discount.type === 'Percentage') {
+                    amount = (currentFee * discount.value) / 100;
+                } else if (discount.type === 'FixedAmount') {
+                    amount = discount.value;
+                }
+                totalDiscount += amount;
+                return {
+                    discountName,
+                    amount
+                };
+            });
+
+            let finalAmount = currentFee - totalDiscount;
+            if (finalAmount < 0) finalAmount = 0;
+
+            const studIdStr = studentId.toString();
+            const shortId = studIdStr.substring(studIdStr.length - 4).toUpperCase();
+            const randomPart = Math.random().toString(36).substring(2, 6).toUpperCase();
+            const challanNumber = `SCH-${year}-${month}-${shortId}-${randomPart}`;
+
+            const dueDay = feeStructure.dueDay || 10;
+            const daysInMonth = new Date(year, month, 0).getDate();
+            const actualDueDay = Math.min(dueDay, daysInMonth);
+            const dueDate = new Date(year, month - 1, actualDueDay);
+
+            let totalDue = finalAmount > 0 ? finalAmount : 0;
+            let newStatus = 'Unpaid';
+            if (previousPaidAmount >= (totalDue + previousArrears)) {
+                newStatus = 'Paid';
+            } else if (previousPaidAmount > 0) {
+                newStatus = 'Partial';
+            }
+
+            const newInvoice = new StudentInvoice({
+                studentId: studentId,
+                school: schoolId,
+                classId: newClassId,
+                month,
+                year,
+                challanNumber,
+                feeBreakdown: detailedBreakdown,
+                discountBreakdown: discountBreakdown,
+                previousArrears,
+                totalAmount: totalDue,
+                dueDate,
+                paidAmount: previousPaidAmount,
+                status: newStatus
+            });
+
+            await newInvoice.save();
+        }
+    }
+};
 
 const searchFamily = async (req, res) => {
     try {
@@ -67,7 +168,7 @@ const studentRegister = async (req, res) => {
         });
 
         if (existingStudent) {
-            res.send({ message: 'Roll Number already exists' });
+            return res.send({ message: 'Roll Number already exists' });
         }
         else {
             const student = new Student({
@@ -120,18 +221,31 @@ const getStudents = async (req, res) => {
         // Base query
         let query = { school: schoolId };
 
+        if (req.query.status === 'Retired') {
+            query.status = 'Retired';
+        } else {
+            query.status = { $ne: 'Retired' };
+        }
+
         // Add search functionality if search term is provided
         if (search) {
             const searchRegex = new RegExp(search, 'i');
+
+            // Find class IDs that match the search term to include students from those classes
+            const matchedClasses = await Sclass.find({ school: schoolId, sclassName: searchRegex }).select('_id');
+            const matchedClassIds = matchedClasses.map(c => c._id);
+
             const isNumeric = !isNaN(search);
             if (isNumeric) {
                 query.$or = [
                     { name: searchRegex },
-                    { rollNum: search }
+                    { rollNum: search },
+                    { sclassName: { $in: matchedClassIds } }
                 ];
             } else {
                 query.$or = [
-                    { name: searchRegex }
+                    { name: searchRegex },
+                    { sclassName: { $in: matchedClassIds } }
                 ];
             }
 
@@ -204,35 +318,77 @@ const getStudentDetail = async (req, res) => {
 const deleteStudent = async (req, res) => {
     try {
         const result = await Student.findByIdAndDelete(req.params.id)
+
+        if (result) {
+            // Remove the student ID from their Family's students array
+            await Family.updateOne(
+                { students: result._id },
+                { $pull: { students: result._id } }
+            );
+
+            // Clean up any billing invoices associated with this student
+            await StudentInvoice.deleteMany({ studentId: result._id });
+            // Clean up any discounts associated with this student
+            await StudentDiscount.deleteMany({ studentId: result._id });
+        }
+
         res.send(result)
     } catch (error) {
-        res.status(500).json(err);
+        res.status(500).json(error);
     }
 }
 
 const deleteStudents = async (req, res) => {
     try {
+        const deletedStudents = await Student.find({ school: req.params.id });
+        const studentIds = deletedStudents.map(student => student._id);
+
         const result = await Student.deleteMany({ school: req.params.id })
         if (result.deletedCount === 0) {
             res.send({ message: "No students found to delete" })
         } else {
+            // Remove all these student IDs from their Family's students array
+            await Family.updateMany(
+                { students: { $in: studentIds } },
+                { $pull: { students: { $in: studentIds } } }
+            );
+
+            // Clean up any billing invoices associated with these students
+            await StudentInvoice.deleteMany({ studentId: { $in: studentIds } });
+            // Clean up any discounts associated with these students
+            await StudentDiscount.deleteMany({ studentId: { $in: studentIds } });
+
             res.send(result)
         }
     } catch (error) {
-        res.status(500).json(err);
+        res.status(500).json(error);
     }
 }
 
 const deleteStudentsByClass = async (req, res) => {
     try {
+        const deletedStudents = await Student.find({ sclassName: req.params.id });
+        const studentIds = deletedStudents.map(student => student._id);
+
         const result = await Student.deleteMany({ sclassName: req.params.id })
         if (result.deletedCount === 0) {
             res.send({ message: "No students found to delete" })
         } else {
+            // Remove all these student IDs from their Family's students array
+            await Family.updateMany(
+                { students: { $in: studentIds } },
+                { $pull: { students: { $in: studentIds } } }
+            );
+
+            // Clean up any billing invoices associated with these students
+            await StudentInvoice.deleteMany({ studentId: { $in: studentIds } });
+            // Clean up any discounts associated with these students
+            await StudentDiscount.deleteMany({ studentId: { $in: studentIds } });
+
             res.send(result)
         }
     } catch (error) {
-        res.status(500).json(err);
+        res.status(500).json(error);
     }
 }
 
@@ -253,76 +409,18 @@ const updateStudent = async (req, res) => {
 
         const oldStudent = await Student.findById(req.params.id);
 
+        const updateData = { ...req.body };
+        delete updateData.familyDetails;
+        delete updateData.familyId;
+        delete updateData.adminID;
+
         let result = await Student.findByIdAndUpdate(req.params.id,
-            { $set: req.body },
+            { $set: updateData },
             { new: true })
 
-        // Check if class changed
-        if (req.body.sclassName && oldStudent.sclassName.toString() !== req.body.sclassName.toString()) {
-            const currentDate = new Date();
-            const month = currentDate.getMonth() + 1;
-            const year = currentDate.getFullYear();
-
-            // Find current month's unpaid invoice
-            const existingInvoice = await StudentInvoice.findOne({
-                studentId: req.params.id,
-                month,
-                year,
-                status: 'Unpaid'
-            });
-
-            if (existingInvoice) {
-                await StudentInvoice.findByIdAndDelete(existingInvoice._id);
-
-                // Generate new invoice for new class
-                const feeStructure = await FeeStructure.findOne({ classId: req.body.sclassName }).populate('feeHeads.headId');
-
-                if (feeStructure) {
-                    // Calculate previous arrears
-                    const previousInvoices = await StudentInvoice.find({ studentId: req.params.id });
-                    let balance = 0;
-                    previousInvoices.forEach(inv => {
-                        balance += (inv.totalAmount + inv.lateFine) - inv.paidAmount;
-                    });
-
-                    let previousArrears = balance > 0 ? balance : 0;
-
-                    let currentFee = 0;
-                    const detailedBreakdown = feeStructure.feeHeads.map(head => {
-                        currentFee += head.amount;
-                        return {
-                            headName: head.headId.name,
-                            amount: head.amount
-                        };
-                    });
-
-                    const studIdStr = req.params.id.toString();
-                    const shortId = studIdStr.substring(studIdStr.length - 4).toUpperCase();
-                    const randomPart = Math.random().toString(36).substring(2, 6).toUpperCase();
-                    const challanNumber = `SCH-${year}-${month}-${shortId}-${randomPart}`;
-
-                    const dueDay = feeStructure.dueDay || 10;
-                    const daysInMonth = new Date(year, month, 0).getDate();
-                    const actualDueDay = Math.min(dueDay, daysInMonth);
-                    const dueDate = new Date(year, month - 1, actualDueDay);
-
-                    const newInvoice = new StudentInvoice({
-                        studentId: req.params.id,
-                        school: result.school,
-                        classId: req.body.sclassName,
-                        month,
-                        year,
-                        challanNumber,
-                        feeBreakdown: detailedBreakdown,
-                        previousArrears,
-                        totalAmount: currentFee > 0 ? currentFee : 0,
-                        dueDate,
-                        status: currentFee <= 0 ? 'Paid' : 'Unpaid'
-                    });
-
-                    await newInvoice.save();
-                }
-            }
+        // Check if class changed and student is not retired
+        if (req.body.sclassName && oldStudent.sclassName.toString() !== req.body.sclassName.toString() && oldStudent.status !== 'Retired') {
+            await regenerateCurrentMonthInvoice(req.params.id, req.body.sclassName, result.school);
         }
 
         result.password = undefined;
@@ -478,7 +576,34 @@ const promoteStudents = async (req, res) => {
             { $set: updateData }
         );
 
+        // Regenerate invoices for the new class if they have an unpaid invoice for the current month
+        for (const studentId of studentIds) {
+            const student = await Student.findById(studentId);
+            if (student && student.status !== 'Retired') {
+                await regenerateCurrentMonthInvoice(studentId, targetClassId, student.school);
+            }
+        }
+
         res.send({ message: "Students promoted successfully", result });
+    } catch (err) {
+        res.status(500).json(err);
+    }
+}
+
+const retireStudents = async (req, res) => {
+    try {
+        const { studentIds } = req.body;
+
+        if (!studentIds || !studentIds.length) {
+            return res.send({ message: "Student IDs are required" });
+        }
+
+        const result = await Student.updateMany(
+            { _id: { $in: studentIds } },
+            { $set: { status: 'Retired', retirementDate: new Date() } }
+        );
+
+        res.send({ message: "Students retired successfully", result });
     } catch (err) {
         res.status(500).json(err);
     }
@@ -501,5 +626,6 @@ module.exports = {
     familyCreate,
     updateFamily,
     deleteFamily,
-    promoteStudents
+    promoteStudents,
+    retireStudents
 };

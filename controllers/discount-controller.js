@@ -6,8 +6,9 @@ const Student = require('../models/studentSchema');
 // Admin manages Discount Groups (Templates)
 const createDiscountGroup = async (req, res) => {
     try {
+        const escapedName = req.body.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const existingGroup = await DiscountGroup.findOne({
-            name: { $regex: new RegExp(`^${req.body.name}$`, 'i') },
+            name: { $regex: new RegExp(`^${escapedName}$`, 'i') },
             school: req.body.adminID
         });
 
@@ -47,6 +48,9 @@ const updateDiscountGroup = async (req, res) => {
 const deleteDiscountGroup = async (req, res) => {
     try {
         const result = await DiscountGroup.findByIdAndDelete(req.params.id);
+        if (result) {
+            await StudentDiscount.deleteMany({ discountGroup: result._id });
+        }
         res.send(result);
     } catch (err) {
         res.status(500).json(err);
@@ -62,6 +66,14 @@ const assignStudentDiscount = async (req, res) => {
         let typeToUse = type;
         let valueToUse = value;
 
+        const student = await Student.findById(studentId);
+        if (!student) {
+            return res.status(404).json({ message: "Student not found" });
+        }
+        if (student.status === 'Retired') {
+            return res.status(400).json({ message: "Cannot assign discounts to a retired student" });
+        }
+
         if (discountGroup) {
             const group = await DiscountGroup.findById(discountGroup);
             if (group) {
@@ -73,6 +85,16 @@ const assignStudentDiscount = async (req, res) => {
 
         if (!nameToUse) {
             return res.status(400).json({ message: "Discount must have a name (either preset or custom)" });
+        }
+
+        const activeDiscounts = await StudentDiscount.find({ studentId, status: 'Active' }).populate('discountGroup');
+        const isDuplicate = activeDiscounts.some(d => {
+            const dName = d.discountGroup ? d.discountGroup.name : d.customName;
+            return dName && dName.toLowerCase() === nameToUse.toLowerCase();
+        });
+
+        if (isDuplicate) {
+            return res.status(400).json({ message: "This discount is already assigned to the student" });
         }
 
         const studentDiscount = new StudentDiscount({

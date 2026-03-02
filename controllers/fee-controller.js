@@ -40,8 +40,9 @@ const updateLateFines = async (query) => {
 // Fee Head Management
 const createFeeHead = async (req, res) => {
     try {
+        const escapedName = req.body.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const existingHead = await FeeHead.findOne({
-            name: { $regex: new RegExp(`^${req.body.name}$`, 'i') },
+            name: { $regex: new RegExp(`^${escapedName}$`, 'i') },
             school: req.body.adminID
         });
 
@@ -124,11 +125,24 @@ const getFeeStructure = async (req, res) => {
 };
 
 // specialized logic 
+const deleteFeeStructure = async (req, res) => {
+    try {
+        const result = await FeeStructure.findOneAndDelete({ classId: req.params.id });
+        if (result) {
+            res.send({ message: "Fee structure deleted successfully", result });
+        } else {
+            res.status(404).json({ message: "Fee structure not found" });
+        }
+    } catch (err) {
+        res.status(500).json(err);
+    }
+};
+
 const generateInvoices = async (req, res) => {
     const { classId, month, year, adminID } = req.body;
 
     try {
-        const students = await Student.find({ sclassName: classId, school: adminID });
+        const students = await Student.find({ sclassName: classId, school: adminID, status: { $ne: 'Retired' } });
         const feeStructure = await FeeStructure.findOne({ classId: classId }).populate('feeHeads.headId');
 
 
@@ -252,8 +266,8 @@ const getInvoices = async (req, res) => {
         const { month, year } = req.query;
         let query = { classId: req.params.id };
         if (month && year) {
-            query.month = month;
-            query.year = year;
+            query.month = parseInt(month);
+            query.year = parseInt(year);
         }
 
         await updateLateFines(query);
@@ -342,7 +356,7 @@ const getFeeStats = async (req, res) => {
 
         let match = { school: new mongoose.Types.ObjectId(schoolId) };
         if (month && year) {
-            match.month = month;
+            match.month = parseInt(month);
             match.year = parseInt(year);
         }
 
@@ -527,6 +541,7 @@ module.exports = {
     deleteFeeHead,
     createFeeStructure,
     getFeeStructure,
+    deleteFeeStructure,
     generateInvoices,
     getInvoices,
     payInvoice,

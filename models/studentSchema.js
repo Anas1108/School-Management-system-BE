@@ -76,6 +76,14 @@ const studentSchema = new mongoose.Schema({
             }
         }
     ],
+    status: {
+        type: String,
+        enum: ['Active', 'Retired'],
+        default: 'Active'
+    },
+    retirementDate: {
+        type: Date
+    },
     sessionYear: {
         type: String,
         default: ""

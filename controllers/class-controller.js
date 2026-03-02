@@ -2,6 +2,11 @@ const Sclass = require('../models/sclassSchema.js');
 const Student = require('../models/studentSchema.js');
 const Subject = require('../models/subjectSchema.js');
 const Teacher = require('../models/teacherSchema.js');
+const SubjectAllocation = require('../models/allocationSchema.js');
+const FeeStructure = require('../models/feeStructureSchema.js');
+const Family = require('../models/familySchema.js');
+const StudentInvoice = require('../models/studentInvoiceSchema.js');
+const StudentDiscount = require('../models/studentDiscountSchema.js');
 
 const sclassCreate = async (req, res) => {
     try {
@@ -57,7 +62,7 @@ const getSclassDetail = async (req, res) => {
 
 const getSclassStudents = async (req, res) => {
     try {
-        let students = await Student.find({ sclassName: req.params.id })
+        let students = await Student.find({ sclassName: req.params.id, status: { $ne: 'Retired' } });
         if (students.length > 0) {
             let modifiedStudents = students.map((student) => {
                 return { ...student._doc, password: undefined };
@@ -77,9 +82,37 @@ const deleteSclass = async (req, res) => {
         if (!deletedClass) {
             return res.send({ message: "Class not found" });
         }
-        const deletedStudents = await Student.deleteMany({ sclassName: req.params.id });
-        const deletedSubjects = await Subject.deleteMany({ sclassName: req.params.id });
-        const deletedTeachers = await Teacher.deleteMany({ teachSclass: req.params.id });
+
+        const deletedStudents = await Student.find({ sclassName: req.params.id });
+        const studentIds = deletedStudents.map(student => student._id);
+
+        await Student.deleteMany({ sclassName: req.params.id });
+        await Subject.deleteMany({ sclassName: req.params.id });
+
+        // Update teachers instead of deleting them!
+        await Teacher.updateMany(
+            { teachSclass: req.params.id },
+            { $unset: { teachSclass: "" } }
+        );
+        await Teacher.updateMany(
+            { classTeacher: req.params.id }, // in case we used this
+            { $unset: { classTeacher: "" } }
+        );
+
+        // Clean up orphaned records
+        await SubjectAllocation.deleteMany({ classId: req.params.id });
+        await FeeStructure.deleteMany({ classId: req.params.id });
+
+        // Cascaded Student Cleanups
+        if (studentIds.length > 0) {
+            await Family.updateMany(
+                { students: { $in: studentIds } },
+                { $pull: { students: { $in: studentIds } } }
+            );
+            await StudentInvoice.deleteMany({ studentId: { $in: studentIds } });
+            await StudentDiscount.deleteMany({ studentId: { $in: studentIds } });
+        }
+
         res.send(deletedClass);
     } catch (error) {
         res.status(500).json(error);
@@ -88,14 +121,41 @@ const deleteSclass = async (req, res) => {
 
 const deleteSclasses = async (req, res) => {
     try {
-        const deletedClasses = await Sclass.deleteMany({ school: req.params.id });
-        if (deletedClasses.deletedCount === 0) {
+        const deletedClasses = await Sclass.find({ school: req.params.id });
+        const classIds = deletedClasses.map(c => c._id);
+        const deletionResult = await Sclass.deleteMany({ school: req.params.id });
+
+        if (deletionResult.deletedCount === 0) {
             return res.send({ message: "No classes found to delete" });
         }
-        const deletedStudents = await Student.deleteMany({ school: req.params.id });
-        const deletedSubjects = await Subject.deleteMany({ school: req.params.id });
-        const deletedTeachers = await Teacher.deleteMany({ school: req.params.id });
-        res.send(deletedClasses);
+
+        const deletedStudents = await Student.find({ school: req.params.id });
+        const studentIds = deletedStudents.map(student => student._id);
+
+        await Student.deleteMany({ school: req.params.id });
+        await Subject.deleteMany({ school: req.params.id });
+
+        // Update teachers instead of deleting them!
+        await Teacher.updateMany(
+            { teachSclass: { $in: classIds } },
+            { $unset: { teachSclass: "" } }
+        );
+
+        // Clean up orphaned records
+        await SubjectAllocation.deleteMany({ school: req.params.id });
+        await FeeStructure.deleteMany({ school: req.params.id });
+
+        // Cascaded Student Cleanups
+        if (studentIds.length > 0) {
+            await Family.updateMany(
+                { students: { $in: studentIds } },
+                { $pull: { students: { $in: studentIds } } }
+            );
+            await StudentInvoice.deleteMany({ studentId: { $in: studentIds } });
+            await StudentDiscount.deleteMany({ studentId: { $in: studentIds } });
+        }
+
+        res.send(deletionResult);
     } catch (error) {
         res.status(500).json(error);
     }

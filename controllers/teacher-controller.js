@@ -163,13 +163,21 @@ const getTeacherDetail = async (req, res) => {
 const updateTeacherSubject = async (req, res) => {
     const { teacherId, teachSubject } = req.body;
     try {
+        const currentTeacher = await Teacher.findById(teacherId);
+        if (currentTeacher && currentTeacher.teachSubject) {
+            // Remove teacher from old subject
+            await Subject.findByIdAndUpdate(currentTeacher.teachSubject, { $unset: { teacher: "" } });
+        }
+
         const updatedTeacher = await Teacher.findByIdAndUpdate(
             teacherId,
             { teachSubject },
             { new: true }
         );
 
-        await Subject.findByIdAndUpdate(teachSubject, { teacher: updatedTeacher._id });
+        if (teachSubject) {
+            await Subject.findByIdAndUpdate(teachSubject, { teacher: updatedTeacher._id });
+        }
 
         res.send(updatedTeacher);
     } catch (error) {
@@ -181,10 +189,23 @@ const deleteTeacher = async (req, res) => {
     try {
         const deletedTeacher = await Teacher.findByIdAndDelete(req.params.id);
 
-        await Subject.updateOne(
-            { teacher: deletedTeacher._id, teacher: { $exists: true } },
+        if (!deletedTeacher) {
+            return res.status(404).json({ message: "Teacher not found" });
+        }
+
+        await Subject.updateMany(
+            { teacher: deletedTeacher._id },
             { $unset: { teacher: 1 } }
         );
+
+        // Remove from Sclass.classTeacher
+        await Sclass.updateMany(
+            { classTeacher: deletedTeacher._id },
+            { $unset: { classTeacher: "" } }
+        );
+
+        // Clean up orphaned SubjectAllocation records
+        await SubjectAllocation.deleteMany({ teacherId: deletedTeacher._id });
 
         res.send(deletedTeacher);
     } catch (error) {
@@ -194,6 +215,7 @@ const deleteTeacher = async (req, res) => {
 
 const deleteTeachers = async (req, res) => {
     try {
+        const deletedTeachers = await Teacher.find({ school: req.params.id });
         const deletionResult = await Teacher.deleteMany({ school: req.params.id });
 
         const deletedCount = deletionResult.deletedCount || 0;
@@ -203,12 +225,21 @@ const deleteTeachers = async (req, res) => {
             return;
         }
 
-        const deletedTeachers = await Teacher.find({ school: req.params.id });
+        const teacherIds = deletedTeachers.map(teacher => teacher._id);
 
         await Subject.updateMany(
-            { teacher: { $in: deletedTeachers.map(teacher => teacher._id) }, teacher: { $exists: true } },
-            { $unset: { teacher: "" }, $unset: { teacher: null } }
+            { teacher: { $in: teacherIds } },
+            { $unset: { teacher: "" } }
         );
+
+        // Remove from Sclass.classTeacher
+        await Sclass.updateMany(
+            { classTeacher: { $in: teacherIds } },
+            { $unset: { classTeacher: "" } }
+        );
+
+        // Clean up orphaned SubjectAllocation records
+        await SubjectAllocation.deleteMany({ teacherId: { $in: teacherIds } });
 
         res.send(deletionResult);
     } catch (error) {
@@ -218,6 +249,7 @@ const deleteTeachers = async (req, res) => {
 
 const deleteTeachersByClass = async (req, res) => {
     try {
+        const deletedTeachers = await Teacher.find({ sclassName: req.params.id });
         const deletionResult = await Teacher.deleteMany({ sclassName: req.params.id });
 
         const deletedCount = deletionResult.deletedCount || 0;
@@ -227,12 +259,21 @@ const deleteTeachersByClass = async (req, res) => {
             return;
         }
 
-        const deletedTeachers = await Teacher.find({ sclassName: req.params.id });
+        const teacherIds = deletedTeachers.map(teacher => teacher._id);
 
         await Subject.updateMany(
-            { teacher: { $in: deletedTeachers.map(teacher => teacher._id) }, teacher: { $exists: true } },
-            { $unset: { teacher: "" }, $unset: { teacher: null } }
+            { teacher: { $in: teacherIds } },
+            { $unset: { teacher: "" } }
         );
+
+        // Remove from Sclass.classTeacher
+        await Sclass.updateMany(
+            { classTeacher: { $in: teacherIds } },
+            { $unset: { classTeacher: "" } }
+        );
+
+        // Clean up orphaned SubjectAllocation records
+        await SubjectAllocation.deleteMany({ teacherId: { $in: teacherIds } });
 
         res.send(deletionResult);
     } catch (error) {
@@ -242,15 +283,16 @@ const deleteTeachersByClass = async (req, res) => {
 
 const updateTeacher = async (req, res) => {
     try {
-        if (req.body.password) {
-            const salt = await bcrypt.genSalt(10)
-            req.body.password = await bcrypt.hash(req.body.password, salt)
+        let teacher = await Teacher.findById(req.params.id);
+        if (!teacher) {
+            return res.status(404).json({ message: "Teacher not found" });
         }
-        let result = await Teacher.findByIdAndUpdate(req.params.id,
-            { $set: req.body },
-            { new: true })
+
+        Object.assign(teacher, req.body);
+        let result = await teacher.save();
+
         result.password = undefined;
-        res.send(result)
+        res.send(result);
     } catch (error) {
         res.status(500).json(error);
     }
