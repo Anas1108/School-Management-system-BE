@@ -34,8 +34,7 @@ const studentSchema = new mongoose.Schema({
     }],
     // New Fields for Family/Guardian Module
     dateOfBirth: {
-        type: Date,
-        required: true
+        type: Date
     },
     gender: {
         type: String,
@@ -44,7 +43,7 @@ const studentSchema = new mongoose.Schema({
     },
     studentBForm: {
         type: String,
-        required: true,
+        sparse: true,
         unique: true
     },
     admissionDate: {
