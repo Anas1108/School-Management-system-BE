@@ -133,16 +133,20 @@ const studentRegister = async (req, res) => {
         const { familyId, familyDetails, ...studentData } = req.body;
         let finalFamilyId = familyId;
 
-        // Validation for CNIC and BForm
-        const cnicPattern = /^\d{5}-\d{7}-\d{1}$/;
-        if (studentData.studentBForm && !cnicPattern.test(studentData.studentBForm)) {
-            return res.send({ message: "Invalid Student B-Form format. Use XXXXX-XXXXXXX-X" });
-        }
+        if (!studentData.studentBForm) {
+            delete studentData.studentBForm;
+        } else {
+            // Validation for CNIC and BForm
+            const cnicPattern = /^\d{5}-\d{7}-\d{1}$/;
+            if (!cnicPattern.test(studentData.studentBForm)) {
+                return res.send({ message: "Invalid Student B-Form format. Use XXXXX-XXXXXXX-X" });
+            }
 
-        // Check if student B-Form already exists
-        const existingBForm = await Student.findOne({ studentBForm: studentData.studentBForm });
-        if (existingBForm) {
-            return res.send({ message: "Student with this B-Form already exists" });
+            // Check if student B-Form already exists
+            const existingBForm = await Student.findOne({ studentBForm: studentData.studentBForm });
+            if (existingBForm) {
+                return res.send({ message: "Student with this B-Form already exists" });
+            }
         }
 
         // Case A: New Family
@@ -414,8 +418,15 @@ const updateStudent = async (req, res) => {
         delete updateData.familyId;
         delete updateData.adminID;
 
+        let updateQuery = { $set: updateData };
+
+        if (!updateData.studentBForm) {
+            delete updateData.studentBForm;
+            updateQuery.$unset = { studentBForm: 1 };
+        }
+
         let result = await Student.findByIdAndUpdate(req.params.id,
-            { $set: updateData },
+            updateQuery,
             { new: true })
 
         // Check if class changed and student is not retired
