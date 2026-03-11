@@ -98,6 +98,15 @@ const deleteFeeHead = async (req, res) => {
 // Fee Structure Management
 const createFeeStructure = async (req, res) => {
     try {
+        if (!req.body.feeHeads || req.body.feeHeads.length === 0) {
+            return res.status(400).json({ message: "Unable to save: Please add at least one fee head (e.g., Tuition Fee) to the breakdown before submitting." });
+        }
+
+        const totalFeeAmount = req.body.feeHeads.reduce((sum, head) => sum + (Number(head.amount) || 0), 0);
+        if (totalFeeAmount <= 0) {
+            return res.status(400).json({ message: "Warning: Fee structure cannot be saved with a 0 total amount. Please enter a valid amount for at least one fee head." });
+        }
+
         const existing = await FeeStructure.findOne({ classId: req.body.classId, school: req.body.adminID });
         if (existing) {
             const result = await FeeStructure.findByIdAndUpdate(existing._id, req.body, { new: true });
@@ -149,6 +158,10 @@ const generateInvoices = async (req, res) => {
         if (!feeStructure) {
             console.log(`Fee structure not found for classId: ${classId} and adminID: ${adminID}`);
             return res.status(400).json({ message: "Fee structure not defined for this class" });
+        }
+
+        if (students.length === 0) {
+            return res.status(404).json({ message: "No active students found in this class to generate invoices." });
         }
 
         const invoices = [];
@@ -252,7 +265,7 @@ const generateInvoices = async (req, res) => {
             await StudentInvoice.insertMany(invoices);
             res.send({ message: `Generated ${invoices.length} invoices` });
         } else {
-            res.send({ message: "No new invoices generated (all students might already have one)" });
+            res.send({ message: "All students in this class already have invoices for this month." });
         }
 
     } catch (err) {
