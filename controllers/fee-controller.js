@@ -102,6 +102,11 @@ const createFeeStructure = async (req, res) => {
             return res.status(400).json({ message: "Unable to save: Please add at least one fee head (e.g., Tuition Fee) to the breakdown before submitting." });
         }
 
+        const totalFeeAmount = req.body.feeHeads.reduce((sum, head) => sum + (Number(head.amount) || 0), 0);
+        if (totalFeeAmount <= 0) {
+            return res.status(400).json({ message: "Warning: Fee structure cannot be saved with a 0 total amount. Please enter a valid amount for at least one fee head." });
+        }
+
         const existing = await FeeStructure.findOne({ classId: req.body.classId, school: req.body.adminID });
         if (existing) {
             const result = await FeeStructure.findByIdAndUpdate(existing._id, req.body, { new: true });
